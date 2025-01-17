@@ -1,10 +1,9 @@
 {
   "name": "auth0-cloudflare-nextjs",
   "version": "1.0.0",
-  "type": "module",
   "description": "Auth0 authentication for Next.js on Cloudflare Workers",
   "main": "dist/index.js",
-  "module": "dist/index.mjs",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
     "dist"
@@ -21,7 +20,7 @@
     "nextjs",
     "authentication"
   ],
-  "author": "Trevor Shires<trevor@shiresfam.com>",
+  "author": "Your Name",
   "license": "MIT",
   "dependencies": {
     "jose": "^4.14.4"
@@ -34,7 +33,6 @@
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "eslint": "^8.44.0",
-    "ts-node": "^10.9.1",
     "tsup": "^7.1.0",
     "typescript": "^5.1.6"
   }

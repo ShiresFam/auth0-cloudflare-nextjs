@@ -1,4 +1,4 @@
-import { jose } from 'jose';
+import jose from 'jose';
 
 export interface Auth0Config {
   domain: string;
@@ -24,7 +24,7 @@ export interface JWTPayload extends jose.JWTPayload {
 
 export class Auth0Client {
   protected config: Auth0Config;
-  protected jwksClient: jose.JWKSCache;
+  protected jwksClient: ReturnType<typeof jose.createRemoteJWKSet>;
 
   constructor(config: Auth0Config) {
     this.config = config;
@@ -67,11 +67,11 @@ export class Auth0Client {
     return response.json();
   }
 
-  async verifyToken(token: string): Promise<jose.JWTVerifyResult<JWTPayload>> {
-    return jose.jwtVerify<JWTPayload>(token, this.jwksClient, {
+  async verifyToken(token: string): Promise<jose.JWTVerifyResult & { payload: JWTPayload }> {
+    return jose.jwtVerify(token, this.jwksClient, {
       issuer: `https://${this.config.domain}/`,
       audience: this.config.clientId,
-    });
+    }) as Promise<jose.JWTVerifyResult & { payload: JWTPayload }>;
   }
 
   async refreshToken(refreshToken: string): Promise<TokenResponse> {
