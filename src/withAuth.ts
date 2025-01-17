@@ -1,24 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Auth0Client, Auth0Config } from './auth0Client';
+import { Auth0Client } from './auth0Client';
+import { CloudflareEnv, AuthenticatedNextRequest, AuthenticatedHandler } from './types';
 
-export type CloudflareEnv = Auth0Config;
-
-export interface AuthenticatedRequest extends NextRequest {
-  auth: {
-    token: string;
-    payload: any; // You can replace 'any' with a more specific type if needed
-  };
-}
-
-export type AuthenticatedHandler<T extends CloudflareEnv> = (
-  req: AuthenticatedRequest,
-  env: T
-) => Promise<NextResponse>;
-
-export function withAuth<T extends CloudflareEnv>(
-  handler: AuthenticatedHandler<T>
-): (req: NextRequest, context: { env: T }) => Promise<NextResponse> {
-  return async (req: NextRequest, context: { env: T }) => {
+export function withAuth(handler: AuthenticatedHandler) {
+  return async (req: NextRequest, context: { env: CloudflareEnv }) => {
     const { env } = context;
 
     const auth0Client = new Auth0Client(env);
@@ -31,12 +16,16 @@ export function withAuth<T extends CloudflareEnv>(
 
     try {
       const verifyResult = await auth0Client.verifyToken(accessToken);
-      const authenticatedReq: AuthenticatedRequest = Object.assign(req, {
-        auth: {
-          token: accessToken,
-          payload: verifyResult.payload,
-        },
-      });
+      const authenticatedReq: AuthenticatedNextRequest = Object.assign(
+        Object.create(Object.getPrototypeOf(req)),
+        req,
+        {
+          auth: {
+            token: accessToken,
+            payload: verifyResult.payload,
+          },
+        }
+      );
       return handler(authenticatedReq, env);
     } catch (error) {
       // Token is invalid or expired
@@ -46,20 +35,35 @@ export function withAuth<T extends CloudflareEnv>(
         try {
           const newTokens = await auth0Client.refreshToken(refreshToken);
           const verifyResult = await auth0Client.verifyToken(newTokens.access_token);
-          const authenticatedReq: AuthenticatedRequest = Object.assign(req, {
-            auth: {
-              token: newTokens.access_token,
-              payload: verifyResult.payload,
-            },
-          });
+          const authenticatedReq: AuthenticatedNextRequest = Object.assign(
+            Object.create(Object.getPrototypeOf(req)),
+            req,
+            {
+              auth: {
+                token: newTokens.access_token,
+                payload: verifyResult.payload,
+              },
+            }
+          );
           const response = await handler(authenticatedReq, env);
 
-          response.cookies.set('access_token', newTokens.access_token, { httpOnly: true, secure: true });
+          // Create a new response based on the handler's response
+          const nextResponse = NextResponse.json(
+            await response.json(),
+            {
+              status: response.status,
+              statusText: response.statusText,
+              headers: response.headers,
+            }
+          );
+
+          // Set the new tokens as cookies
+          nextResponse.cookies.set('access_token', newTokens.access_token, { httpOnly: true, secure: true });
           if (newTokens.refresh_token) {
-            response.cookies.set('refresh_token', newTokens.refresh_token, { httpOnly: true, secure: true });
+            nextResponse.cookies.set('refresh_token', newTokens.refresh_token, { httpOnly: true, secure: true });
           }
 
-          return response;
+          return nextResponse;
         } catch (refreshError) {
           // Refresh token is invalid or expired
           return NextResponse.redirect(new URL('/api/login', req.url));

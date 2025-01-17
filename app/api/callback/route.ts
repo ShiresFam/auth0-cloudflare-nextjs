@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Auth0Client } from '../../../lib/auth0';
+import { CloudflareEnv } from '../../../src/types';
 
 export async function GET(req: NextRequest, context: { env: CloudflareEnv }) {
   const { env } = context;

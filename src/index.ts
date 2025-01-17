@@ -1,4 +1,6 @@
-export { Auth0Client, type Auth0Config, type TokenResponse, type JWTPayload } from './auth0Client';
-export { withAuth, type CloudflareEnv, type AuthenticatedRequest, type AuthenticatedHandler } from './withAuth';
+export { Auth0Client } from './auth0Client';
+export { withAuth } from './withAuth';
 export { handleLogin, handleCallback, handleLogout } from './authUtils';
+export type { Auth0Config, TokenResponse, JWTPayload } from './auth0Client';
+export type { CloudflareEnv, AuthenticatedNextRequest, AuthenticatedHandler } from './types';
 

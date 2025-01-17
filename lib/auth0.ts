@@ -1,4 +1,4 @@
-import { jose } from 'jose';
+import jose from 'jose';
 
 interface Auth0Config {
   domain: string;
@@ -10,7 +10,7 @@ interface Auth0Config {
 
 export class Auth0Client {
   private config: Auth0Config;
-  private jwksClient: jose.JWKSCache;
+  private jwksClient:  ReturnType<typeof jose.createRemoteJWKSet>;
 
   constructor(config: Auth0Config) {
     this.config = config;
