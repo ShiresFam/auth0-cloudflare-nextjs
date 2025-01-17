@@ -1,4 +1,4 @@
-import jose from 'jose';
+import jose, { JWTPayload as JWTPayload$1 } from 'jose';
 import { NextRequest, NextResponse } from 'next/server';
 
 interface Auth0Config {
@@ -31,20 +31,23 @@ declare class Auth0Client {
     refreshToken(refreshToken: string): Promise<TokenResponse>;
 }
 
-type CloudflareEnv = Auth0Config;
-interface AuthenticatedRequest extends NextRequest {
+interface CloudflareEnv extends Auth0Config {
+    [key: string]: any;
+}
+interface AuthenticatedNextRequest extends NextRequest {
     auth: {
         token: string;
-        payload: any;
+        payload: JWTPayload$1;
     };
 }
-type AuthenticatedHandler<T extends CloudflareEnv> = (req: AuthenticatedRequest, env: T) => Promise<NextResponse>;
-declare function withAuth<T extends CloudflareEnv>(handler: AuthenticatedHandler<T>): (req: NextRequest, context: {
-    env: T;
-}) => Promise<NextResponse>;
+type AuthenticatedHandler = (request: AuthenticatedNextRequest, env: CloudflareEnv) => Promise<Response>;
+
+declare function withAuth(handler: AuthenticatedHandler): (req: NextRequest, context: {
+    env: CloudflareEnv;
+}) => Promise<Response>;
 
 declare function handleLogin(req: NextRequest, env: Auth0Config): Promise<NextResponse>;
 declare function handleCallback(req: NextRequest, env: Auth0Config): Promise<NextResponse>;
 declare function handleLogout(req: NextRequest): NextResponse;
 
-export { Auth0Client, Auth0Config, AuthenticatedHandler, AuthenticatedRequest, CloudflareEnv, JWTPayload, TokenResponse, handleCallback, handleLogin, handleLogout, withAuth };
+export { Auth0Client, Auth0Config, AuthenticatedHandler, AuthenticatedNextRequest, CloudflareEnv, JWTPayload, TokenResponse, handleCallback, handleLogin, handleLogout, withAuth };

@@ -71,12 +71,16 @@ function withAuth(handler) {
     }
     try {
       const verifyResult = await auth0Client.verifyToken(accessToken);
-      const authenticatedReq = Object.assign(req, {
-        auth: {
-          token: accessToken,
-          payload: verifyResult.payload
+      const authenticatedReq = Object.assign(
+        Object.create(Object.getPrototypeOf(req)),
+        req,
+        {
+          auth: {
+            token: accessToken,
+            payload: verifyResult.payload
+          }
         }
-      });
+      );
       return handler(authenticatedReq, env);
     } catch (error) {
       const refreshToken = req.cookies.get("refresh_token")?.value;
@@ -84,18 +88,30 @@ function withAuth(handler) {
         try {
           const newTokens = await auth0Client.refreshToken(refreshToken);
           const verifyResult = await auth0Client.verifyToken(newTokens.access_token);
-          const authenticatedReq = Object.assign(req, {
-            auth: {
-              token: newTokens.access_token,
-              payload: verifyResult.payload
+          const authenticatedReq = Object.assign(
+            Object.create(Object.getPrototypeOf(req)),
+            req,
+            {
+              auth: {
+                token: newTokens.access_token,
+                payload: verifyResult.payload
+              }
             }
-          });
+          );
           const response = await handler(authenticatedReq, env);
-          response.cookies.set("access_token", newTokens.access_token, { httpOnly: true, secure: true });
+          const nextResponse = NextResponse.json(
+            await response.json(),
+            {
+              status: response.status,
+              statusText: response.statusText,
+              headers: response.headers
+            }
+          );
+          nextResponse.cookies.set("access_token", newTokens.access_token, { httpOnly: true, secure: true });
           if (newTokens.refresh_token) {
-            response.cookies.set("refresh_token", newTokens.refresh_token, { httpOnly: true, secure: true });
+            nextResponse.cookies.set("refresh_token", newTokens.refresh_token, { httpOnly: true, secure: true });
           }
-          return response;
+          return nextResponse;
         } catch (refreshError) {
           return NextResponse.redirect(new URL("/api/login", req.url));
         }
