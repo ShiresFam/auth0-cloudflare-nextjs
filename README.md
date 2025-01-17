@@ -1,4 +1,4 @@
-# Auth0 Cloudflare Next.js Authentication Library
+# auth0-cloudflare-nextjs
 
 A lightweight, type-safe authentication library for Next.js applications deployed on Cloudflare Workers, using Auth0 as the authentication provider.
 
@@ -9,6 +9,9 @@ A lightweight, type-safe authentication library for Next.js applications deploye
 - Built-in handlers for login, logout, and callback
 - Customizable Auth0 client
 - Token refresh functionality
+- Server-side session handling
+- Client-side React components for easy integration
+- Catch-all API route for simplified setup
 - Compatible with Next.js 14.2.5 and above
 
 ## Installation
@@ -39,95 +42,126 @@ npm install auth0-cloudflare-nextjs
 AUTH0_DOMAIN = "your-auth0-domain"
 AUTH0_CLIENT_ID = "your-client-id"
 AUTH0_CLIENT_SECRET = "your-client-secret"
-AUTH0_CALLBACK_URL = "https://your-worker-domain.workers.dev/api/callback"
+AUTH0_CALLBACK_URL = "https://your-worker-domain.workers.dev/api/auth/callback"
 AUTH0_AUDIENCE = "your-api-audience" # optional
 ```
 
 ## Usage
 
-### Basic Setup
+### Setting up the catch-all API route
 
-1. Create login, callback, and logout API routes:
+Create a catch-all API route for Auth0 in your Next.js project:
 
 ```typescript
-// app/api/login/route.ts
-import { handleLogin, CloudflareEnv } from 'auth0-cloudflare-nextjs';
-import { NextRequest } from 'next/server';
+// app/api/auth/[auth0]/route.ts
+import { handleAuth } from 'auth0-cloudflare-nextjs';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
-export function GET(req: NextRequest, context: { env: CloudflareEnv }) {
-  return handleLogin(req, context.env);
-}
-
-// app/api/callback/route.ts
-import { handleCallback, CloudflareEnv } from 'auth0-cloudflare-nextjs';
-import { NextRequest } from 'next/server';
-
-export function GET(req: NextRequest, context: { env: CloudflareEnv }) {
-  return handleCallback(req, context.env);
-}
-
-// app/api/logout/route.ts
-import { handleLogout } from 'auth0-cloudflare-nextjs';
-import { NextRequest } from 'next/server';
-
-export function GET(req: NextRequest) {
-  return handleLogout(req);
-}
+export const GET = async (req: NextRequest) => {
+  const context = await getCloudflareContext();
+  return handleAuth()(req, context);
+};
 ```
 
-2. Protect your API routes using the `withAuth` middleware:
+### Setting up middleware
+
+Create a `middleware.ts` file in the root of your Next.js project:
 
 ```typescript
-// app/api/protected/route.ts
-import { withAuth, AuthenticatedRequest, CloudflareEnv } from 'auth0-cloudflare-nextjs';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { withAuth } from 'auth0-cloudflare-nextjs';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
-async function handler(req: AuthenticatedRequest, env: CloudflareEnv) {
-  const userEmail = req.auth.payload.email;
-  return NextResponse.json({ message: `Hello, ${userEmail}!` });
+export async function middleware(request: NextRequest) {
+  const context = await getCloudflareContext();
+  
+  const handler = withAuth(async (req, ctx) => {
+    // This function will only be called if the user is authenticated
+    // You can add additional logic here if needed
+    return NextResponse.next();
+  });
+
+  return handler(request, context);
 }
 
-export const GET = withAuth(handler);
+// Optionally, you can specify which routes should be protected
+export const config = {
+  matcher: ['/protected/:path*'],
+};
 ```
 
-### Advanced Usage
+### Server-side usage
 
-#### Customizing the Auth0 Client
-
-You can extend the `Auth0Client` class to add custom functionality:
+You can use the `getSession` function in your server-side code:
 
 ```typescript
-import { Auth0Client, Auth0Config, TokenResponse } from 'auth0-cloudflare-nextjs';
+import { getSession } from 'auth0-cloudflare-nextjs';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
+import { headers } from 'next/headers';
 
-class CustomAuth0Client extends Auth0Client {
-  constructor(config: Auth0Config) {
-    super(config);
+export default async function ProfileServer() {
+  const req = { headers: headers() } as NextRequest;
+  const context = await getCloudflareContext();
+  const session = await getSession(req, context);
+
+  if (!session?.user) {
+    return <div>Not logged in</div>;
   }
 
-  async exchangeCodeForTokens(code: string): Promise<TokenResponse> {
-    const tokens = await super.exchangeCodeForTokens(code);
-    // Add custom logic here
-    return tokens;
-  }
+  const { user } = session;
 
-  // Add new methods as needed
+  return (
+    <div>
+      <img src={user.picture || "/placeholder.svg"} alt={user.name} />
+      <h2>{user.name}</h2>
+      <p>{user.email}</p>
+    </div>
+  );
 }
 ```
 
-#### Using Custom Claims
+### Client-side usage
 
-If your JWT includes custom claims, you can extend the `JWTPayload` interface:
+Wrap your app with the `UserProvider`:
 
 ```typescript
-import { JWTPayload } from 'auth0-cloudflare-nextjs';
+// app/layout.tsx
+import { UserProvider } from 'auth0-cloudflare-nextjs/client';
 
-interface CustomJWTPayload extends JWTPayload {
-  custom_claim?: string;
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <UserProvider>
+        <body>{children}</body>
+      </UserProvider>
+    </html>
+  );
 }
+```
 
-// Use this interface when working with the verified token
-const verifiedToken = await auth0Client.verifyToken<CustomJWTPayload>(token);
-console.log(verifiedToken.payload.custom_claim);
+Use the `useUser` hook in your client components:
+
+```typescript
+'use client';
+
+import { useUser } from 'auth0-cloudflare-nextjs/client';
+
+export default function ProfileClient() {
+  const { user, error, isLoading } = useUser();
+
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>{error.message}</div>;
+
+  return (
+    user && (
+      <div>
+        <img src={user.picture || "/placeholder.svg"} alt={user.name} />
+        <h2>{user.name}</h2>
+        <p>{user.email}</p>
+      </div>
+    )
+  );
+}
 ```
 
 ## API Reference
@@ -138,26 +172,36 @@ The main class for interacting with Auth0. It provides methods for:
 
 - `getAuthorizationUrl(state: string): Promise<string>`
 - `exchangeCodeForTokens(code: string): Promise<TokenResponse>`
-- `verifyToken(token: string): Promise<jose.JWTVerifyResult<JWTPayload>>`
+- `verifyToken(token: string): Promise<jose.JWTVerifyResult & { payload: JWTPayload }>`
 - `refreshToken(refreshToken: string): Promise<TokenResponse>`
 
 ### `withAuth`
 
 A middleware function to protect API routes. It verifies the access token and refreshes it if necessary.
 
-### Utility Functions
+### `handleAuth`
 
-- `handleLogin`: Initiates the login process
-- `handleCallback`: Handles the Auth0 callback after successful authentication
-- `handleLogout`: Logs out the user
+A function that creates a catch-all handler for Auth0-related routes.
 
-### Types
+### `getSession`
+
+A function to retrieve the current user's session on the server-side.
+
+### `UserProvider`
+
+A React component that provides Auth0 user context to your application.
+
+### `useUser`
+
+A React hook that provides access to the current user's information in client components.
+
+## Types
 
 - `Auth0Config`: Configuration interface for Auth0Client
 - `TokenResponse`: Interface for the token response from Auth0
 - `JWTPayload`: Interface for the JWT payload (extendable for custom claims)
-- `CloudflareEnv`: Type for Cloudflare environment variables
-- `AuthenticatedRequest`: Extended NextRequest with auth property
+- `Auth0CloudflareContext`: Extended Cloudflare context with Auth0-specific environment variables
+- `AuthenticatedNextRequest`: Extended NextRequest with auth property
 - `AuthenticatedHandler`: Type for request handlers protected by withAuth
 
 ## Error Handling
@@ -197,17 +241,9 @@ Common issues and their solutions:
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-Please ensure your code adheres to the existing style and passes all tests.
-
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 ## Support
 

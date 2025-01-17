@@ -1,55 +1,60 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { Auth0Client } from './auth0Client';
-import { CloudflareEnv, AuthenticatedNextRequest, AuthenticatedHandler } from './types';
+import { NextRequest, NextResponse } from "next/server";
+import { Auth0Client } from "./auth0Client";
+import {
+  AuthenticatedNextRequest,
+  AuthenticatedHandler,
+  Auth0CloudflareContext,
+} from "./types";
+import { createAuth0CloudflareContext } from "./contextUtils";
 
 export function withAuth(handler: AuthenticatedHandler) {
-  return async (req: NextRequest, context: { env: CloudflareEnv }) => {
+  return async (req: NextRequest, context: Auth0CloudflareContext) => {
     const { env } = context;
 
-    const auth0Client = new Auth0Client(env);
+    const auth0Client = new Auth0Client({
+      domain: env.AUTH0_DOMAIN,
+      clientId: env.AUTH0_CLIENT_ID,
+      clientSecret: env.AUTH0_CLIENT_SECRET,
+      callbackUrl: env.AUTH0_CALLBACK_URL,
+      audience: env.AUTH0_AUDIENCE,
+    });
 
-    const accessToken = req.cookies.get('access_token')?.value;
+    const accessToken = req.cookies.get("access_token")?.value;
 
     if (!accessToken) {
-      return NextResponse.redirect(new URL('/api/login', req.url));
+      return NextResponse.redirect(new URL("/api/auth/login", req.url));
     }
 
     try {
       const verifyResult = await auth0Client.verifyToken(accessToken);
-      const authenticatedReq: AuthenticatedNextRequest = Object.assign(
-        Object.create(Object.getPrototypeOf(req)),
-        req,
-        {
-          auth: {
-            token: accessToken,
-            payload: verifyResult.payload,
-          },
-        }
-      );
-      return handler(authenticatedReq, env);
+      const authenticatedReq = new NextRequest(req, {
+        headers: req.headers,
+      }) as AuthenticatedNextRequest;
+      authenticatedReq.auth = {
+        token: accessToken,
+        payload: verifyResult.payload,
+      };
+      return handler(authenticatedReq, context);
     } catch (error) {
-      // Token is invalid or expired
-      const refreshToken = req.cookies.get('refresh_token')?.value;
+      const refreshToken = req.cookies.get("refresh_token")?.value;
 
       if (refreshToken) {
         try {
           const newTokens = await auth0Client.refreshToken(refreshToken);
-          const verifyResult = await auth0Client.verifyToken(newTokens.access_token);
-          const authenticatedReq: AuthenticatedNextRequest = Object.assign(
-            Object.create(Object.getPrototypeOf(req)),
-            req,
-            {
-              auth: {
-                token: newTokens.access_token,
-                payload: verifyResult.payload,
-              },
-            }
+          const verifyResult = await auth0Client.verifyToken(
+            newTokens.access_token
           );
-          const response = await handler(authenticatedReq, env);
+          const authenticatedReq = new NextRequest(req, {
+            headers: req.headers,
+          }) as AuthenticatedNextRequest;
+          authenticatedReq.auth = {
+            token: newTokens.access_token,
+            payload: verifyResult.payload,
+          };
+          const response = await handler(authenticatedReq, context);
 
-          // Create a new response based on the handler's response
           const nextResponse = NextResponse.json(
-            await response.json(),
+            response instanceof Response ? await response.json() : response,
             {
               status: response.status,
               statusText: response.statusText,
@@ -57,21 +62,24 @@ export function withAuth(handler: AuthenticatedHandler) {
             }
           );
 
-          // Set the new tokens as cookies
-          nextResponse.cookies.set('access_token', newTokens.access_token, { httpOnly: true, secure: true });
+          nextResponse.cookies.set("access_token", newTokens.access_token, {
+            httpOnly: true,
+            secure: true,
+          });
           if (newTokens.refresh_token) {
-            nextResponse.cookies.set('refresh_token', newTokens.refresh_token, { httpOnly: true, secure: true });
+            nextResponse.cookies.set("refresh_token", newTokens.refresh_token, {
+              httpOnly: true,
+              secure: true,
+            });
           }
 
           return nextResponse;
         } catch (refreshError) {
-          // Refresh token is invalid or expired
-          return NextResponse.redirect(new URL('/api/login', req.url));
+          return NextResponse.redirect(new URL("/api/auth/login", req.url));
         }
       } else {
-        return NextResponse.redirect(new URL('/api/login', req.url));
+        return NextResponse.redirect(new URL("/api/auth/login", req.url));
       }
     }
   };
 }
-

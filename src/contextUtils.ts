@@ -1,0 +1,38 @@
+import { CloudflareContext } from "@opennextjs/cloudflare";
+import { Auth0CloudflareContext, Auth0Env } from "./types";
+
+export function createAuth0CloudflareContext(
+  baseContext: CloudflareContext
+): Auth0CloudflareContext {
+  const requiredEnvVars = [
+    "AUTH0_DOMAIN",
+    "AUTH0_CLIENT_ID",
+    "AUTH0_CLIENT_SECRET",
+    "AUTH0_CALLBACK_URL",
+  ];
+  const missingEnvVars = requiredEnvVars.filter(
+    (varName) => !(varName in baseContext.env)
+  );
+
+  if (missingEnvVars.length > 0) {
+    throw new Error(
+      `Missing required environment variables: ${missingEnvVars.join(", ")}`
+    );
+  }
+
+  const auth0Env: Auth0Env = {
+    AUTH0_DOMAIN: (baseContext.env as any).AUTH0_DOMAIN,
+    AUTH0_CLIENT_ID: (baseContext.env as any).AUTH0_CLIENT_ID,
+    AUTH0_CLIENT_SECRET: (baseContext.env as any).AUTH0_CLIENT_SECRET,
+    AUTH0_CALLBACK_URL: (baseContext.env as any).AUTH0_CALLBACK_URL,
+    AUTH0_AUDIENCE: (baseContext.env as any).AUTH0_AUDIENCE,
+  };
+
+  return {
+    ...baseContext,
+    env: {
+      ...baseContext.env,
+      ...auth0Env,
+    },
+  };
+}

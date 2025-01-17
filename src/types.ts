@@ -1,9 +1,27 @@
-import { Auth0Config } from './auth0Client';
-import { NextRequest } from 'next/server';
-import { JWTPayload } from 'jose';
+import { CloudflareContext } from "@opennextjs/cloudflare";
+import { NextRequest } from "next/server";
+import { JWTPayload } from "jose";
 
-export interface CloudflareEnv extends Auth0Config {
-  [key: string]: any;
+export interface Auth0Env {
+  AUTH0_DOMAIN: string;
+  AUTH0_CLIENT_ID: string;
+  AUTH0_CLIENT_SECRET: string;
+  AUTH0_CALLBACK_URL: string;
+  AUTH0_AUDIENCE?: string;
+}
+
+export type Auth0CloudflareEnv = CloudflareContext["env"] & Auth0Env;
+
+export interface Auth0CloudflareContext extends Omit<CloudflareContext, "env"> {
+  env: Auth0CloudflareEnv;
+}
+
+export interface Auth0Config {
+  domain: string;
+  clientId: string;
+  clientSecret: string;
+  callbackUrl: string;
+  audience?: string;
 }
 
 export interface AuthenticatedNextRequest extends NextRequest {
@@ -15,6 +33,5 @@ export interface AuthenticatedNextRequest extends NextRequest {
 
 export type AuthenticatedHandler = (
   request: AuthenticatedNextRequest,
-  env: CloudflareEnv
+  context: Auth0CloudflareContext
 ) => Promise<Response>;
-
