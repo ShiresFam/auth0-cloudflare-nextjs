@@ -10,6 +10,7 @@ import { createAuth0CloudflareContext } from "./contextUtils";
 export function withAuth(handler: AuthenticatedHandler) {
   return async (req: NextRequest, context: Auth0CloudflareContext) => {
     const { env } = context;
+    console.log("env", env);
 
     const auth0Client = new Auth0Client({
       domain: env.AUTH0_DOMAIN,

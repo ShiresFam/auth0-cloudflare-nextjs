@@ -1,9 +1,7 @@
 import * as jose from 'jose';
-import jose__default, { JWTPayload as JWTPayload$1 } from 'jose';
+import { JWTPayload as JWTPayload$1 } from 'jose';
 import { NextRequest, NextResponse } from 'next/server';
 import { CloudflareContext } from '@opennextjs/cloudflare';
-import * as react_jsx_runtime from 'react/jsx-runtime';
-import React from 'react';
 
 interface Auth0Config {
     domain: string;
@@ -19,17 +17,17 @@ interface TokenResponse {
     expires_in: number;
     token_type: string;
 }
-interface JWTPayload extends jose__default.JWTPayload {
+interface JWTPayload extends jose.JWTPayload {
     email?: string;
     name?: string;
 }
 declare class Auth0Client {
     protected config: Auth0Config;
-    protected jwksClient: ReturnType<typeof jose__default.createRemoteJWKSet>;
+    protected jwksClient: ReturnType<typeof jose.createRemoteJWKSet>;
     constructor(config: Auth0Config);
     getAuthorizationUrl(state: string): Promise<string>;
     exchangeCodeForTokens(code: string): Promise<TokenResponse>;
-    verifyToken(token: string): Promise<jose__default.JWTVerifyResult & {
+    verifyToken(token: string): Promise<jose.JWTVerifyResult & {
         payload: JWTPayload;
     }>;
     refreshToken(refreshToken: string): Promise<TokenResponse>;
@@ -62,27 +60,11 @@ declare function handleLogout(req: NextRequest): Promise<NextResponse>;
 
 declare function createAuth0CloudflareContext(baseContext: CloudflareContext): Auth0CloudflareContext;
 
-declare function handleAuth(): (req: NextRequest, context: CloudflareContext) => Promise<NextResponse<unknown>>;
+declare function handleAuth(): (req: NextRequest) => Promise<NextResponse<unknown>>;
 
 declare function getSession(req: NextRequest, context: CloudflareContext): Promise<{
     user: jose.JWTPayload & JWTPayload;
     accessToken: string;
 } | null>;
 
-interface Auth0User {
-    name?: string;
-    email?: string;
-    picture?: string;
-    [key: string]: any;
-}
-interface Auth0ContextType {
-    user: Auth0User | null;
-    error: Error | null;
-    isLoading: boolean;
-}
-declare function UserProvider({ children }: {
-    children: React.ReactNode;
-}): react_jsx_runtime.JSX.Element;
-declare function useUser(): Auth0ContextType;
-
-export { Auth0Client, Auth0CloudflareContext, Auth0CloudflareEnv, Auth0Config, AuthenticatedHandler, AuthenticatedNextRequest, JWTPayload, TokenResponse, UserProvider, createAuth0CloudflareContext, getSession, handleAuth, handleCallback, handleLogin, handleLogout, useUser, withAuth };
+export { Auth0Client, Auth0CloudflareContext, Auth0CloudflareEnv, Auth0Config, AuthenticatedHandler, AuthenticatedNextRequest, JWTPayload, TokenResponse, createAuth0CloudflareContext, getSession, handleAuth, handleCallback, handleLogin, handleLogout, withAuth };

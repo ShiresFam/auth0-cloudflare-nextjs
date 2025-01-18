@@ -16,9 +16,11 @@ export async function handleLogin(
     callbackUrl: env.AUTH0_CALLBACK_URL,
     audience: env.AUTH0_AUDIENCE,
   });
+  console.log("req.url from login", req.url);
 
   const state = crypto.randomUUID();
   const authorizationUrl = await auth0Client.getAuthorizationUrl(state);
+  console.log("authorization_url", authorizationUrl);
 
   const response = NextResponse.redirect(authorizationUrl);
   response.cookies.set("auth_state", state, { httpOnly: true, secure: true });
@@ -40,6 +42,8 @@ export async function handleCallback(
     audience: env.AUTH0_AUDIENCE,
   });
 
+  const origin = new URL(env.AUTH0_CALLBACK_URL).origin;
+
   const { searchParams } = new URL(req.url);
   const code = searchParams.get("code");
   const state = searchParams.get("state");
@@ -53,7 +57,11 @@ export async function handleCallback(
   try {
     const tokens = await auth0Client.exchangeCodeForTokens(code);
 
+    console.log("req.url for callback", req.url);
+
     const response = NextResponse.redirect(new URL("/", req.url));
+
+    console.log("response.url for callback", new URL("/", req.url).toString());
 
     response.cookies.set("access_token", tokens.access_token, {
       httpOnly: true,
