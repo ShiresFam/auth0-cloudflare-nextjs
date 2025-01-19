@@ -32,13 +32,13 @@ __export(src_exports, {
 module.exports = __toCommonJS(src_exports);
 
 // src/auth0Client.ts
+var import_jwt_decode = require("jwt-decode");
 var Auth0Client = class {
   constructor(config) {
-    this.jwks = [];
     this.config = {
       ...config,
       domain: this.ensureHttps(config.domain),
-      callbackUrl: this.ensureHttps(config.callbackUrl)
+      callbackUrl: this.ensureCorrectProtocol(config.callbackUrl)
     };
   }
   ensureHttps(url) {
@@ -47,18 +47,17 @@ var Auth0Client = class {
     }
     return `https://${url}`;
   }
+  ensureCorrectProtocol(url) {
+    const urlObject = new URL(url);
+    if (urlObject.hostname === "localhost" || urlObject.hostname.includes("127.0.0.1")) {
+      urlObject.protocol = "http:";
+    } else {
+      urlObject.protocol = "https:";
+    }
+    return urlObject.toString();
+  }
   normalizeUrl(url) {
     return url.endsWith("/") ? url.slice(0, -1) : url;
-  }
-  decodeToken(token) {
-    const parts = token.split(".");
-    if (parts.length !== 3) {
-      throw new Error("Invalid token format");
-    }
-    const payload = parts[1];
-    const paddedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const decodedPayload = atob(paddedPayload);
-    return JSON.parse(decodedPayload);
   }
   async getAuthorizationUrl(state) {
     const params = new URLSearchParams({
@@ -93,12 +92,7 @@ var Auth0Client = class {
     });
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(
-        "Failed to exchange code for tokens. Status:",
-        response.status,
-        "Error:",
-        errorText
-      );
+      console.error("Failed to exchange code for tokens. Status:", response.status, "Error:", errorText);
       throw new Error(`Failed to exchange code for tokens: ${errorText}`);
     }
     const tokens = await response.json();
@@ -108,7 +102,7 @@ var Auth0Client = class {
     }
     console.log("Received tokens:", JSON.stringify(tokens, null, 2));
     if (tokens.id_token) {
-      const decodedIdToken = this.decodeToken(tokens.id_token);
+      const decodedIdToken = (0, import_jwt_decode.jwtDecode)(tokens.id_token);
       console.log("Decoded ID Token:", JSON.stringify(decodedIdToken, null, 2));
     } else {
       console.warn("No ID token received in the token response");
@@ -116,84 +110,40 @@ var Auth0Client = class {
     return tokens;
   }
   isValidTokenResponse(tokens) {
-    return typeof tokens === "object" && typeof tokens.access_token === "string" && typeof tokens.id_token === "string" && typeof tokens.expires_in === "number" && typeof tokens.token_type === "string" && (tokens.refresh_token === void 0 || typeof tokens.refresh_token === "string");
+    return typeof tokens === "object" && tokens !== null && "access_token" in tokens && typeof tokens.access_token === "string" && "id_token" in tokens && typeof tokens.id_token === "string" && "expires_in" in tokens && typeof tokens.expires_in === "number" && "token_type" in tokens && typeof tokens.token_type === "string" && (!("refresh_token" in tokens) || typeof tokens.refresh_token === "string");
   }
   async verifyToken(token) {
-    if (this.jwks.length === 0) {
-      await this.fetchJwks();
-    }
-    const parts = token.split(".");
-    if (parts.length !== 3) {
-      throw new Error("Invalid token format");
-    }
-    const [headerB64, payloadB64, signature] = parts;
-    const base64UrlDecode = (str) => {
-      str = str.replace(/-/g, "+").replace(/_/g, "/");
-      while (str.length % 4) {
-        str += "=";
-      }
-      return atob(str);
-    };
-    let decodedHeader;
-    let decodedPayload;
     try {
-      decodedHeader = JSON.parse(base64UrlDecode(headerB64));
-      decodedPayload = JSON.parse(base64UrlDecode(payloadB64));
-    } catch (error) {
-      console.error("Error decoding token:", error);
-      throw new Error("Invalid token encoding");
-    }
-    console.log("Decoded payload:", decodedPayload);
-    console.log("Expected issuer:", this.config.domain);
-    console.log("Expected audience:", this.config.clientId);
-    const kid = decodedHeader.kid;
-    if (!kid) {
-      throw new Error('Token header is missing "kid" property');
-    }
-    const key = this.jwks.find((k) => "kid" in k && k.kid === kid);
-    if (!key) {
-      throw new Error("Unable to find a matching key in the JWKS");
-    }
-    const cryptoKey = await crypto.subtle.importKey(
-      "jwk",
-      key,
-      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-      false,
-      ["verify"]
-    );
-    const encoder = new TextEncoder();
-    const data = encoder.encode(`${headerB64}.${payloadB64}`);
-    const signatureArray = Uint8Array.from(
-      base64UrlDecode(signature),
-      (c) => c.charCodeAt(0)
-    );
-    const isValid = await crypto.subtle.verify(
-      "RSASSA-PKCS1-v1_5",
-      cryptoKey,
-      signatureArray,
-      data
-    );
-    if (!isValid) {
-      throw new Error("Invalid token signature");
-    }
-    const now = Math.floor(Date.now() / 1e3);
-    if (typeof decodedPayload.exp === "number" && decodedPayload.exp < now) {
-      throw new Error("Token has expired");
-    }
-    if (typeof decodedPayload.nbf === "number" && decodedPayload.nbf > now) {
-      throw new Error("Token is not yet valid");
-    }
-    if (this.normalizeUrl(decodedPayload.iss) !== this.normalizeUrl(this.config.domain)) {
-      console.error("Token issuer mismatch:", {
-        tokenIssuer: decodedPayload.iss,
-        expectedIssuer: this.config.domain
-      });
-      throw new Error("Token issuer is invalid");
-    }
-    const tokenAudience = decodedPayload.aud;
-    const tokenAzp = decodedPayload.azp;
-    if (Array.isArray(tokenAudience)) {
-      if (!tokenAudience.includes(this.config.clientId)) {
+      const decodedToken = (0, import_jwt_decode.jwtDecode)(token);
+      console.log("Decoded token:", decodedToken);
+      const now = Math.floor(Date.now() / 1e3);
+      if (typeof decodedToken.exp === "number" && decodedToken.exp < now) {
+        throw new Error("Token has expired");
+      }
+      if (typeof decodedToken.nbf === "number" && decodedToken.nbf > now) {
+        throw new Error("Token is not yet valid");
+      }
+      if (this.normalizeUrl(decodedToken.iss) !== this.normalizeUrl(this.config.domain)) {
+        console.error("Token issuer mismatch:", {
+          tokenIssuer: decodedToken.iss,
+          expectedIssuer: this.config.domain
+        });
+        throw new Error("Token issuer is invalid");
+      }
+      const tokenAudience = decodedToken.aud;
+      const tokenAzp = decodedToken.azp;
+      if (Array.isArray(tokenAudience)) {
+        if (!tokenAudience.includes(this.config.clientId)) {
+          if (tokenAzp !== this.config.clientId) {
+            console.error("Token audience and azp mismatch:", {
+              tokenAudience,
+              tokenAzp,
+              expectedAudience: this.config.clientId
+            });
+            throw new Error("Token audience and authorized party are invalid");
+          }
+        }
+      } else if (tokenAudience !== this.config.clientId) {
         if (tokenAzp !== this.config.clientId) {
           console.error("Token audience and azp mismatch:", {
             tokenAudience,
@@ -203,26 +153,12 @@ var Auth0Client = class {
           throw new Error("Token audience and authorized party are invalid");
         }
       }
-    } else if (tokenAudience !== this.config.clientId) {
-      if (tokenAzp !== this.config.clientId) {
-        console.error("Token audience and azp mismatch:", {
-          tokenAudience,
-          tokenAzp,
-          expectedAudience: this.config.clientId
-        });
-        throw new Error("Token audience and authorized party are invalid");
-      }
+      console.log("Token verification successful");
+      return { payload: decodedToken };
+    } catch (error) {
+      console.error("Error verifying token:", error);
+      throw new Error("Invalid token");
     }
-    console.log("Token verification successful");
-    return { payload: decodedPayload };
-  }
-  async fetchJwks() {
-    const response = await fetch(`${this.config.domain}/.well-known/jwks.json`);
-    if (!response.ok) {
-      throw new Error("Failed to fetch JWKS");
-    }
-    const jwks = await response.json();
-    this.jwks = jwks.keys;
   }
   async refreshToken(refreshToken) {
     const response = await fetch(`${this.config.domain}/oauth/token`, {
@@ -237,12 +173,7 @@ var Auth0Client = class {
     });
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(
-        "Failed to refresh token. Status:",
-        response.status,
-        "Error:",
-        errorText
-      );
+      console.error("Failed to refresh token. Status:", response.status, "Error:", errorText);
       throw new Error(`Failed to refresh token: ${errorText}`);
     }
     const tokens = await response.json();
@@ -276,7 +207,7 @@ var Auth0Client = class {
 
 // src/withAuth.ts
 var import_server = require("next/server");
-var import_cloudflare = require("@opennextjs/cloudflare");
+var import_cloudflare2 = require("@opennextjs/cloudflare");
 
 // src/contextUtils.ts
 function createAuth0CloudflareContext(baseContext) {
@@ -311,27 +242,25 @@ function createAuth0CloudflareContext(baseContext) {
 }
 
 // src/urlUtils.ts
-function constructBaseUrl(req) {
-  let baseUrl;
-  const referer = req.headers.get("referer");
-  if (referer) {
-    try {
-      const refererUrl = new URL(referer);
-      baseUrl = `${refererUrl.protocol}//${refererUrl.host}`;
-    } catch (error) {
-      console.error("Error parsing referer:", error);
-    }
+var import_cloudflare = require("@opennextjs/cloudflare");
+async function constructBaseUrl(req) {
+  const cloudflareContext = await (0, import_cloudflare.getCloudflareContext)();
+  const context = createAuth0CloudflareContext(cloudflareContext);
+  const { env } = context;
+  if (env.AUTH0_BASE_URL) {
+    return env.AUTH0_BASE_URL;
   }
-  if (!baseUrl) {
-    const protocol = req.headers.get("x-forwarded-proto") || "https";
-    const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost";
-    baseUrl = `${protocol}://${host}`;
+  let protocol = req.headers.get("x-forwarded-proto") || "http";
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost:8000";
+  if (!host.includes("localhost") && !host.includes("127.0.0.1")) {
+    protocol = "https";
   }
+  const baseUrl = `${protocol}://${host}`;
   console.log("Constructed Base URL:", baseUrl);
   return baseUrl;
 }
-function constructFullUrl(req, path) {
-  const baseUrl = constructBaseUrl(req);
+async function constructFullUrl(req, path) {
+  const baseUrl = await constructBaseUrl(req);
   const fullUrl = new URL(path, baseUrl).toString();
   console.log("Constructed Full URL:", fullUrl);
   return fullUrl;
@@ -340,19 +269,19 @@ function constructFullUrl(req, path) {
 // src/withAuth.ts
 function withAuth(handler) {
   return async (req) => {
-    const cloudflareContext = await (0, import_cloudflare.getCloudflareContext)();
+    const cloudflareContext = await (0, import_cloudflare2.getCloudflareContext)();
     const context = createAuth0CloudflareContext(cloudflareContext);
     const { env } = context;
     const auth0Client = new Auth0Client({
       domain: env.AUTH0_DOMAIN,
       clientId: env.AUTH0_CLIENT_ID,
       clientSecret: env.AUTH0_CLIENT_SECRET,
-      callbackUrl: constructFullUrl(req, "/api/auth/callback"),
+      callbackUrl: await constructFullUrl(req, "/api/auth/callback"),
       audience: env.AUTH0_AUDIENCE
     });
     const accessToken = req.cookies.get("access_token")?.value;
     if (!accessToken) {
-      return import_server.NextResponse.redirect(constructFullUrl(req, "/api/auth/login"));
+      return import_server.NextResponse.redirect(await constructFullUrl(req, "/api/auth/login"));
     }
     try {
       const verifyResult = await auth0Client.verifyToken(accessToken);
@@ -366,29 +295,59 @@ function withAuth(handler) {
       return handler(authenticatedReq);
     } catch (error) {
       console.error("Error verifying token:", error);
-      return import_server.NextResponse.redirect(constructFullUrl(req, "/api/auth/login"));
+      const refreshToken = req.cookies.get("refresh_token")?.value;
+      if (refreshToken) {
+        try {
+          const tokens = await auth0Client.refreshToken(refreshToken);
+          const verifyResult = await auth0Client.verifyToken(tokens.access_token);
+          const authenticatedReq = new import_server.NextRequest(req, {
+            headers: req.headers
+          });
+          authenticatedReq.auth = {
+            token: tokens.access_token,
+            payload: verifyResult.payload
+          };
+          const response = await handler(authenticatedReq);
+          const secureCookie = env.DISABLE_SECURE_COOKIES !== "true";
+          response.cookies.set("access_token", tokens.access_token, {
+            httpOnly: true,
+            secure: secureCookie
+          });
+          if (tokens.refresh_token) {
+            response.cookies.set("refresh_token", tokens.refresh_token, {
+              httpOnly: true,
+              secure: secureCookie
+            });
+          }
+          return response;
+        } catch (refreshError) {
+          console.error("Error refreshing token:", refreshError);
+        }
+      }
+      return import_server.NextResponse.redirect(await constructFullUrl(req, "/api/auth/login"));
     }
   };
 }
 
 // src/authUtils.ts
 var import_server2 = require("next/server");
-var import_cloudflare2 = require("@opennextjs/cloudflare");
+var import_cloudflare3 = require("@opennextjs/cloudflare");
 async function handleLogin(req) {
-  const cloudflareContext = await (0, import_cloudflare2.getCloudflareContext)();
+  const cloudflareContext = await (0, import_cloudflare3.getCloudflareContext)();
   const context = createAuth0CloudflareContext(cloudflareContext);
   const { env } = context;
+  const callbackUrl = await constructFullUrl(req, "/api/auth/callback");
   console.log("Auth0 Configuration:", {
     domain: env.AUTH0_DOMAIN,
     clientId: env.AUTH0_CLIENT_ID,
-    callbackUrl: constructFullUrl(req, "/api/auth/callback"),
+    callbackUrl,
     audience: env.AUTH0_AUDIENCE
   });
   const auth0Client = new Auth0Client({
     domain: env.AUTH0_DOMAIN,
     clientId: env.AUTH0_CLIENT_ID,
     clientSecret: env.AUTH0_CLIENT_SECRET,
-    callbackUrl: constructFullUrl(req, "/api/auth/callback"),
+    callbackUrl,
     audience: env.AUTH0_AUDIENCE
   });
   try {
@@ -396,22 +355,24 @@ async function handleLogin(req) {
     const authorizationUrl = await auth0Client.getAuthorizationUrl(state);
     console.log("Login - Authorization URL:", authorizationUrl);
     const response = import_server2.NextResponse.redirect(authorizationUrl);
-    response.cookies.set("auth_state", state, { httpOnly: true, secure: true });
+    const secureCookie = env.DISABLE_SECURE_COOKIES !== "true";
+    response.cookies.set("auth_state", state, { httpOnly: true, secure: secureCookie });
     return response;
   } catch (error) {
     console.error("Error in handleLogin:", error);
-    return import_server2.NextResponse.redirect(constructFullUrl(req, "/auth/error"));
+    return import_server2.NextResponse.redirect(await constructFullUrl(req, "/auth/error"));
   }
 }
 async function handleCallback(req) {
-  const cloudflareContext = await (0, import_cloudflare2.getCloudflareContext)();
+  const cloudflareContext = await (0, import_cloudflare3.getCloudflareContext)();
   const context = createAuth0CloudflareContext(cloudflareContext);
   const { env } = context;
+  const callbackUrl = await constructFullUrl(req, "/api/auth/callback");
   const auth0Client = new Auth0Client({
     domain: env.AUTH0_DOMAIN,
     clientId: env.AUTH0_CLIENT_ID,
     clientSecret: env.AUTH0_CLIENT_SECRET,
-    callbackUrl: constructFullUrl(req, "/api/auth/callback"),
+    callbackUrl,
     audience: env.AUTH0_AUDIENCE
   });
   const { searchParams } = new URL(req.url);
@@ -419,58 +380,56 @@ async function handleCallback(req) {
   const state = searchParams.get("state");
   const error = searchParams.get("error");
   const errorDescription = searchParams.get("error_description");
-  console.log("Callback - Received params:", {
-    code,
-    state,
-    error,
-    errorDescription
-  });
+  console.log("Callback - Received params:", { code, state, error, errorDescription });
   const storedState = req.cookies.get("auth_state")?.value;
   if (error) {
     console.error("Auth0 error:", error, errorDescription);
-    return import_server2.NextResponse.redirect(constructFullUrl(req, "/auth/error"));
+    return import_server2.NextResponse.redirect(await constructFullUrl(req, "/auth/error"));
   }
   if (!code || !state || !storedState || state !== storedState) {
     console.error("Invalid callback parameters");
-    return import_server2.NextResponse.redirect(constructFullUrl(req, "/api/auth/login"));
+    return import_server2.NextResponse.redirect(await constructFullUrl(req, "/api/auth/login"));
   }
   try {
     const tokens = await auth0Client.exchangeCodeForTokens(code);
     const userInfo = await auth0Client.getUserInfo(tokens.access_token);
-    const response = import_server2.NextResponse.redirect(constructFullUrl(req, "/"));
+    const response = import_server2.NextResponse.redirect(await constructFullUrl(req, "/"));
+    const secureCookie = env.DISABLE_SECURE_COOKIES !== "true";
     response.cookies.set("access_token", tokens.access_token, {
       httpOnly: true,
-      secure: true
+      secure: secureCookie
     });
     if (tokens.refresh_token) {
       response.cookies.set("refresh_token", tokens.refresh_token, {
         httpOnly: true,
-        secure: true
+        secure: secureCookie
       });
     }
     response.cookies.delete("auth_state");
     response.cookies.set("user_info", JSON.stringify(userInfo), {
       httpOnly: true,
-      secure: true
+      secure: secureCookie,
+      maxAge: 7 * 24 * 60 * 60
+      // 7 days
     });
     return response;
   } catch (error2) {
     console.error("Error during callback:", error2);
-    return import_server2.NextResponse.redirect(constructFullUrl(req, "/auth/error"));
+    return import_server2.NextResponse.redirect(await constructFullUrl(req, "/auth/error"));
   }
 }
 async function handleLogout(req) {
-  const cloudflareContext = await (0, import_cloudflare2.getCloudflareContext)();
+  const cloudflareContext = await (0, import_cloudflare3.getCloudflareContext)();
   const context = createAuth0CloudflareContext(cloudflareContext);
   const { env } = context;
   const auth0Client = new Auth0Client({
     domain: env.AUTH0_DOMAIN,
     clientId: env.AUTH0_CLIENT_ID,
     clientSecret: env.AUTH0_CLIENT_SECRET,
-    callbackUrl: constructFullUrl(req, "/api/auth/callback"),
+    callbackUrl: await constructFullUrl(req, "/api/auth/callback"),
     audience: env.AUTH0_AUDIENCE
   });
-  const returnTo = constructFullUrl(req, "/");
+  const returnTo = await constructFullUrl(req, "/");
   const logoutUrl = auth0Client.getLogoutUrl(returnTo);
   const response = import_server2.NextResponse.redirect(logoutUrl);
   response.cookies.delete("access_token");
@@ -483,26 +442,28 @@ async function handleLogout(req) {
 var import_server3 = require("next/server");
 
 // src/getSession.ts
-var import_cloudflare3 = require("@opennextjs/cloudflare");
+var import_cloudflare4 = require("@opennextjs/cloudflare");
 async function getSession(req) {
-  const cloudflareContext = await (0, import_cloudflare3.getCloudflareContext)();
+  const cloudflareContext = await (0, import_cloudflare4.getCloudflareContext)();
   const context = createAuth0CloudflareContext(cloudflareContext);
   const { env } = context;
   const auth0Client = new Auth0Client({
     domain: env.AUTH0_DOMAIN,
     clientId: env.AUTH0_CLIENT_ID,
     clientSecret: env.AUTH0_CLIENT_SECRET,
-    callbackUrl: constructFullUrl(req, "/api/auth/callback"),
+    callbackUrl: await constructFullUrl(req, "/api/auth/callback"),
     audience: env.AUTH0_AUDIENCE
   });
   const accessToken = req.cookies.get("access_token")?.value;
-  if (!accessToken) {
+  const userInfoCookie = req.cookies.get("user_info")?.value;
+  if (!accessToken || !userInfoCookie) {
     return null;
   }
   try {
-    const verifyResult = await auth0Client.verifyToken(accessToken);
+    await auth0Client.verifyToken(accessToken);
+    const userInfo = JSON.parse(userInfoCookie);
     return {
-      user: verifyResult.payload,
+      user: userInfo,
       accessToken
     };
   } catch (error) {
