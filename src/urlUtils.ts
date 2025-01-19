@@ -20,7 +20,6 @@ export async function constructBaseUrl(req: NextRequest): Promise<string> {
   }
 
   const baseUrl = `${protocol}://${host}`;
-  console.log('Constructed Base URL:', baseUrl);
   return baseUrl;
 }
 
@@ -28,7 +27,6 @@ export async function constructFullUrl(req: NextRequest, path: string): Promise<
   const baseUrl = await constructBaseUrl(req);
   const fullUrl = new URL(path, baseUrl).toString();
 
-  console.log('Constructed Full URL:', fullUrl);
   return fullUrl;
 }
 

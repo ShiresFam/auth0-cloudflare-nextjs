@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Auth0Client } from './auth0Client';
-import { AuthenticatedNextRequest, AuthenticatedHandler, Auth0CloudflareContext } from './types';
+import { AuthenticatedNextRequest, AuthenticatedHandler, Auth0CloudflareContext, JWTPayload } from './types';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { createAuth0CloudflareContext } from './contextUtils';
 import { constructFullUrl } from './urlUtils';
@@ -27,61 +27,66 @@ export function withAuth(handler: AuthenticatedHandler) {
 
     try {
       const verifyResult = await auth0Client.verifyToken(accessToken);
-      const authenticatedReq = new NextRequest(req, {
-        headers: new Headers(req.headers),
-      }) as AuthenticatedNextRequest;
-      authenticatedReq.auth = {
-        token: accessToken,
-        payload: verifyResult.payload,
-      };
-      
-      // Set the Authorization header
-      authenticatedReq.headers.set('Authorization', `Bearer ${accessToken}`);
-
-      return handler(authenticatedReq);
+      return await handleAuthenticatedRequest(req, accessToken, verifyResult.payload, handler);
     } catch (error) {
       console.error('Error verifying token:', error);
-      
-      // Try to refresh the token if a refresh token is available
-      const refreshToken = req.cookies.get('refresh_token')?.value;
-      if (refreshToken) {
-        try {
-          const tokens = await auth0Client.refreshToken(refreshToken);
-          const verifyResult = await auth0Client.verifyToken(tokens.access_token);
-          const authenticatedReq = new NextRequest(req, {
-            headers: new Headers(req.headers),
-          }) as AuthenticatedNextRequest;
-          authenticatedReq.auth = {
-            token: tokens.access_token,
-            payload: verifyResult.payload,
-          };
-
-          // Set the Authorization header
-          authenticatedReq.headers.set('Authorization', `Bearer ${tokens.access_token}`);
-
-          const response = await handler(authenticatedReq);
-
-          // Update the cookies with the new tokens
-          const secureCookie = env.DISABLE_SECURE_COOKIES !== 'true';
-          response.cookies.set('access_token', tokens.access_token, {
-            httpOnly: true,
-            secure: secureCookie,
-          });
-          if (tokens.refresh_token) {
-            response.cookies.set('refresh_token', tokens.refresh_token, {
-              httpOnly: true,
-              secure: secureCookie,
-            });
-          }
-
-          return response;
-        } catch (refreshError) {
-          console.error('Error refreshing token:', refreshError);
-        }
-      }
-
-      return NextResponse.redirect(await constructFullUrl(req, '/api/auth/login'));
+      return await handleTokenRefresh(req, auth0Client, env, handler);
     }
   };
+}
+
+async function handleAuthenticatedRequest(
+  req: NextRequest, 
+  accessToken: string, 
+  payload: JWTPayload, 
+  handler: AuthenticatedHandler
+) {
+  const authenticatedReq = createAuthenticatedRequest(req, accessToken, payload);
+  return handler(authenticatedReq);
+}
+
+async function handleTokenRefresh(
+  req: NextRequest, 
+  auth0Client: Auth0Client, 
+  env: Auth0CloudflareContext['env'], 
+  handler: AuthenticatedHandler
+) {
+  const refreshToken = req.cookies.get('refresh_token')?.value;
+  if (refreshToken) {
+    try {
+      const tokens = await auth0Client.refreshToken(refreshToken);
+      const verifyResult = await auth0Client.verifyToken(tokens.access_token);
+      const authenticatedReq = createAuthenticatedRequest(req, tokens.access_token, verifyResult.payload);
+      const response = await handler(authenticatedReq);
+      return updateResponseWithNewTokens(response, tokens, env);
+    } catch (refreshError) {
+      console.error('Error refreshing token:', refreshError);
+    }
+  }
+  return NextResponse.redirect(await constructFullUrl(req, '/api/auth/login'));
+}
+
+function createAuthenticatedRequest(req: NextRequest, accessToken: string, payload: JWTPayload): AuthenticatedNextRequest {
+  const authenticatedReq = new NextRequest(req, {
+    headers: new Headers(req.headers),
+  }) as AuthenticatedNextRequest;
+  authenticatedReq.auth = { token: accessToken, payload };
+  authenticatedReq.headers.set('Authorization', `Bearer ${accessToken}`);
+  return authenticatedReq;
+}
+
+function updateResponseWithNewTokens(response: NextResponse, tokens: { access_token: string, refresh_token?: string }, env: Auth0CloudflareContext['env']) {
+  const secureCookie = env.DISABLE_SECURE_COOKIES !== 'true';
+  response.cookies.set('access_token', tokens.access_token, {
+    httpOnly: true,
+    secure: secureCookie,
+  });
+  if (tokens.refresh_token) {
+    response.cookies.set('refresh_token', tokens.refresh_token, {
+      httpOnly: true,
+      secure: secureCookie,
+    });
+  }
+  return response;
 }
 

@@ -14,7 +14,6 @@ export function createProperRequest(originalRequest: NextRequest): NextRequest {
         refererUrl.origin
       );
 
-      console.log("Created proper URL from referer:", properUrl.toString());
 
       return new NextRequest(properUrl, {
         method: originalRequest.method,
@@ -36,11 +35,6 @@ export function createProperRequest(originalRequest: NextRequest): NextRequest {
     const properUrl = new URL(
       originalUrl.pathname + originalUrl.search,
       `${forwardedProto}://${forwardedHost}`
-    );
-
-    console.log(
-      "Created proper URL from forwarded headers:",
-      properUrl.toString()
     );
 
     return new NextRequest(properUrl, {

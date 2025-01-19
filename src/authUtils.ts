@@ -26,12 +26,6 @@ export async function handleLogin(req: NextRequest): Promise<NextResponse> {
 
   const callbackUrl = await constructFullUrl(req, "/api/auth/callback");
 
-  console.log('Auth0 Configuration:', {
-    domain: env.AUTH0_DOMAIN,
-    clientId: env.AUTH0_CLIENT_ID,
-    callbackUrl: callbackUrl,
-    audience: env.AUTH0_AUDIENCE,
-  });
 
   const auth0Client = new Auth0Client({
     domain: env.AUTH0_DOMAIN,
@@ -49,7 +43,6 @@ export async function handleLogin(req: NextRequest): Promise<NextResponse> {
     const state = crypto.randomUUID();
     const authorizationUrl = await auth0Client.getAuthorizationUrl(state);
 
-    console.log('Login - Authorization URL:', authorizationUrl);
 
     const response = NextResponse.redirect(authorizationUrl);
     const secureCookie = env.DISABLE_SECURE_COOKIES !== 'true';
@@ -87,7 +80,6 @@ export async function handleCallback(req: NextRequest): Promise<NextResponse> {
   const error = searchParams.get("error");
   const errorDescription = searchParams.get("error_description");
 
-  console.log('Callback - Received params:', { code, state, error, errorDescription });
 
   const storedState = req.cookies.get("auth_state")?.value;
 

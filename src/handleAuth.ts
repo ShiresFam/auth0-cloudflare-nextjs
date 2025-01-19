@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleLogin, handleCallback, handleLogout } from "./authUtils";
-import { getSession } from "./getSession";
+import {  getSessionFromRequest } from "./getSession";
 
 export function handleAuth() {
   return async (req: NextRequest) => {
     const { pathname } = new URL(req.url);
-    console.log("pathname", pathname);
-    console.log("req.url", req.nextUrl);
-    console.log("headers", req.headers);
+
 
     switch (pathname) {
       case "/api/auth/login":
@@ -17,7 +15,7 @@ export function handleAuth() {
       case "/api/auth/logout":
         return handleLogout(req);
       case "/api/auth/me":
-        const session = await getSession(req);
+        const session = await getSessionFromRequest(req);
         if (session?.user) {
           return NextResponse.json(session.user);
         }

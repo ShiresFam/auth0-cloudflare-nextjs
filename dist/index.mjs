@@ -38,7 +38,6 @@ var Auth0Client = class {
       params.append("audience", this.config.audience);
     }
     const authorizationUrl = `${this.config.domain}/authorize?${params.toString()}`;
-    console.log("Generated Authorization URL:", authorizationUrl);
     return authorizationUrl;
   }
   async exchangeCodeForTokens(code) {
@@ -50,8 +49,6 @@ var Auth0Client = class {
       code,
       redirect_uri: this.config.callbackUrl
     });
-    console.log("Exchanging code for tokens. Token URL:", tokenUrl);
-    console.log("Request body:", body);
     const response = await fetch(tokenUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -67,13 +64,6 @@ var Auth0Client = class {
       console.error("Invalid token response:", tokens);
       throw new Error("Invalid token response");
     }
-    console.log("Received tokens:", JSON.stringify(tokens, null, 2));
-    if (tokens.id_token) {
-      const decodedIdToken = jwtDecode(tokens.id_token);
-      console.log("Decoded ID Token:", JSON.stringify(decodedIdToken, null, 2));
-    } else {
-      console.warn("No ID token received in the token response");
-    }
     return tokens;
   }
   isValidTokenResponse(tokens) {
@@ -82,7 +72,6 @@ var Auth0Client = class {
   async verifyToken(token) {
     try {
       const decodedToken = jwtDecode(token);
-      console.log("Decoded token:", decodedToken);
       const now = Math.floor(Date.now() / 1e3);
       if (typeof decodedToken.exp === "number" && decodedToken.exp < now) {
         throw new Error("Token has expired");
@@ -120,7 +109,6 @@ var Auth0Client = class {
           throw new Error("Token audience and authorized party are invalid");
         }
       }
-      console.log("Token verification successful");
       return { payload: decodedToken };
     } catch (error) {
       console.error("Error verifying token:", error);
@@ -160,7 +148,6 @@ var Auth0Client = class {
       throw new Error("Failed to fetch user info");
     }
     const userInfo = await response.json();
-    console.log("User Info:", JSON.stringify(userInfo, null, 2));
     return userInfo;
   }
   getLogoutUrl(returnTo) {
@@ -223,13 +210,11 @@ async function constructBaseUrl(req) {
     protocol = "https";
   }
   const baseUrl = `${protocol}://${host}`;
-  console.log("Constructed Base URL:", baseUrl);
   return baseUrl;
 }
 async function constructFullUrl(req, path) {
   const baseUrl = await constructBaseUrl(req);
   const fullUrl = new URL(path, baseUrl).toString();
-  console.log("Constructed Full URL:", fullUrl);
   return fullUrl;
 }
 
@@ -252,50 +237,53 @@ function withAuth(handler) {
     }
     try {
       const verifyResult = await auth0Client.verifyToken(accessToken);
-      const authenticatedReq = new NextRequest(req, {
-        headers: new Headers(req.headers)
-      });
-      authenticatedReq.auth = {
-        token: accessToken,
-        payload: verifyResult.payload
-      };
-      authenticatedReq.headers.set("Authorization", `Bearer ${accessToken}`);
-      return handler(authenticatedReq);
+      return await handleAuthenticatedRequest(req, accessToken, verifyResult.payload, handler);
     } catch (error) {
       console.error("Error verifying token:", error);
-      const refreshToken = req.cookies.get("refresh_token")?.value;
-      if (refreshToken) {
-        try {
-          const tokens = await auth0Client.refreshToken(refreshToken);
-          const verifyResult = await auth0Client.verifyToken(tokens.access_token);
-          const authenticatedReq = new NextRequest(req, {
-            headers: new Headers(req.headers)
-          });
-          authenticatedReq.auth = {
-            token: tokens.access_token,
-            payload: verifyResult.payload
-          };
-          authenticatedReq.headers.set("Authorization", `Bearer ${tokens.access_token}`);
-          const response = await handler(authenticatedReq);
-          const secureCookie = env.DISABLE_SECURE_COOKIES !== "true";
-          response.cookies.set("access_token", tokens.access_token, {
-            httpOnly: true,
-            secure: secureCookie
-          });
-          if (tokens.refresh_token) {
-            response.cookies.set("refresh_token", tokens.refresh_token, {
-              httpOnly: true,
-              secure: secureCookie
-            });
-          }
-          return response;
-        } catch (refreshError) {
-          console.error("Error refreshing token:", refreshError);
-        }
-      }
-      return NextResponse.redirect(await constructFullUrl(req, "/api/auth/login"));
+      return await handleTokenRefresh(req, auth0Client, env, handler);
     }
   };
+}
+async function handleAuthenticatedRequest(req, accessToken, payload, handler) {
+  const authenticatedReq = createAuthenticatedRequest(req, accessToken, payload);
+  return handler(authenticatedReq);
+}
+async function handleTokenRefresh(req, auth0Client, env, handler) {
+  const refreshToken = req.cookies.get("refresh_token")?.value;
+  if (refreshToken) {
+    try {
+      const tokens = await auth0Client.refreshToken(refreshToken);
+      const verifyResult = await auth0Client.verifyToken(tokens.access_token);
+      const authenticatedReq = createAuthenticatedRequest(req, tokens.access_token, verifyResult.payload);
+      const response = await handler(authenticatedReq);
+      return updateResponseWithNewTokens(response, tokens, env);
+    } catch (refreshError) {
+      console.error("Error refreshing token:", refreshError);
+    }
+  }
+  return NextResponse.redirect(await constructFullUrl(req, "/api/auth/login"));
+}
+function createAuthenticatedRequest(req, accessToken, payload) {
+  const authenticatedReq = new NextRequest(req, {
+    headers: new Headers(req.headers)
+  });
+  authenticatedReq.auth = { token: accessToken, payload };
+  authenticatedReq.headers.set("Authorization", `Bearer ${accessToken}`);
+  return authenticatedReq;
+}
+function updateResponseWithNewTokens(response, tokens, env) {
+  const secureCookie = env.DISABLE_SECURE_COOKIES !== "true";
+  response.cookies.set("access_token", tokens.access_token, {
+    httpOnly: true,
+    secure: secureCookie
+  });
+  if (tokens.refresh_token) {
+    response.cookies.set("refresh_token", tokens.refresh_token, {
+      httpOnly: true,
+      secure: secureCookie
+    });
+  }
+  return response;
 }
 
 // src/authUtils.ts
@@ -310,12 +298,6 @@ async function handleLogin(req) {
   const context = createAuth0CloudflareContext(cloudflareContext);
   const { env } = context;
   const callbackUrl = await constructFullUrl(req, "/api/auth/callback");
-  console.log("Auth0 Configuration:", {
-    domain: env.AUTH0_DOMAIN,
-    clientId: env.AUTH0_CLIENT_ID,
-    callbackUrl,
-    audience: env.AUTH0_AUDIENCE
-  });
   const auth0Client = new Auth0Client({
     domain: env.AUTH0_DOMAIN,
     clientId: env.AUTH0_CLIENT_ID,
@@ -329,7 +311,6 @@ async function handleLogin(req) {
   try {
     const state = crypto.randomUUID();
     const authorizationUrl = await auth0Client.getAuthorizationUrl(state);
-    console.log("Login - Authorization URL:", authorizationUrl);
     const response = NextResponse2.redirect(authorizationUrl);
     const secureCookie = env.DISABLE_SECURE_COOKIES !== "true";
     response.cookies.set("auth_state", state, { httpOnly: true, secure: secureCookie });
@@ -359,7 +340,6 @@ async function handleCallback(req) {
   const state = searchParams.get("state");
   const error = searchParams.get("error");
   const errorDescription = searchParams.get("error_description");
-  console.log("Callback - Received params:", { code, state, error, errorDescription });
   const storedState = req.cookies.get("auth_state")?.value;
   if (error) {
     console.error("Auth0 error:", error, errorDescription);
@@ -453,7 +433,8 @@ import { NextResponse as NextResponse3 } from "next/server";
 
 // src/getSession.ts
 import { getCloudflareContext as getCloudflareContext4 } from "@opennextjs/cloudflare";
-async function getSession(req) {
+import { cookies } from "next/headers";
+async function getSessionFromRequest(req) {
   const cloudflareContext = await getCloudflareContext4();
   const context = createAuth0CloudflareContext(cloudflareContext);
   const { env } = context;
@@ -461,11 +442,40 @@ async function getSession(req) {
     domain: env.AUTH0_DOMAIN,
     clientId: env.AUTH0_CLIENT_ID,
     clientSecret: env.AUTH0_CLIENT_SECRET,
-    callbackUrl: await constructFullUrl(req, "/api/auth/callback"),
+    callbackUrl: env.AUTH0_CALLBACK_URL,
     audience: env.AUTH0_AUDIENCE
   });
   const accessToken = req.cookies.get("access_token")?.value;
   const userInfoCookie = req.cookies.get("user_info")?.value;
+  if (!accessToken || !userInfoCookie) {
+    return null;
+  }
+  try {
+    await auth0Client.verifyToken(accessToken);
+    const userInfo = JSON.parse(userInfoCookie);
+    return {
+      user: userInfo,
+      accessToken
+    };
+  } catch (error) {
+    console.error("Error verifying token:", error);
+    return null;
+  }
+}
+async function getServerSession() {
+  const cloudflareContext = await getCloudflareContext4();
+  const context = createAuth0CloudflareContext(cloudflareContext);
+  const { env } = context;
+  const auth0Client = new Auth0Client({
+    domain: env.AUTH0_DOMAIN,
+    clientId: env.AUTH0_CLIENT_ID,
+    clientSecret: env.AUTH0_CLIENT_SECRET,
+    callbackUrl: env.AUTH0_CALLBACK_URL,
+    audience: env.AUTH0_AUDIENCE
+  });
+  const cookieStore = cookies();
+  const accessToken = cookieStore.get("access_token")?.value;
+  const userInfoCookie = cookieStore.get("user_info")?.value;
   if (!accessToken || !userInfoCookie) {
     return null;
   }
@@ -486,9 +496,6 @@ async function getSession(req) {
 function handleAuth() {
   return async (req) => {
     const { pathname } = new URL(req.url);
-    console.log("pathname", pathname);
-    console.log("req.url", req.nextUrl);
-    console.log("headers", req.headers);
     switch (pathname) {
       case "/api/auth/login":
         return handleLogin(req);
@@ -497,7 +504,7 @@ function handleAuth() {
       case "/api/auth/logout":
         return handleLogout(req);
       case "/api/auth/me":
-        const session = await getSession(req);
+        const session = await getSessionFromRequest(req);
         if (session?.user) {
           return NextResponse3.json(session.user);
         }
@@ -510,7 +517,8 @@ function handleAuth() {
 export {
   Auth0Client,
   createAuth0CloudflareContext,
-  getSession,
+  getServerSession,
+  getSessionFromRequest,
   handleAuth,
   handleCallback,
   handleGetUser,

@@ -1,4 +1,5 @@
 import {jwtDecode} from "jwt-decode";
+import type { JWTPayload } from "./types";
 
 export interface Auth0Config {
   domain: string;
@@ -16,9 +17,9 @@ export interface TokenResponse {
   token_type: string;
 }
 
-export interface JWTPayload {
-  [key: string]: string | number | boolean | null | undefined;
-}
+// export interface JWTPayload {
+//   [key: string]: string | number | boolean | null | undefined;
+// }
 
 export interface UserInfo {
   sub: string;
@@ -92,7 +93,6 @@ export class Auth0Client {
     }
 
     const authorizationUrl = `${this.config.domain}/authorize?${params.toString()}`;
-    console.log("Generated Authorization URL:", authorizationUrl);
     return authorizationUrl;
   }
 
@@ -106,8 +106,6 @@ export class Auth0Client {
       redirect_uri: this.config.callbackUrl,
     });
 
-    console.log("Exchanging code for tokens. Token URL:", tokenUrl);
-    console.log("Request body:", body);
 
     const response = await fetch(tokenUrl, {
       method: "POST",
@@ -128,14 +126,13 @@ export class Auth0Client {
       throw new Error("Invalid token response");
     }
 
-    console.log("Received tokens:", JSON.stringify(tokens, null, 2));
     
-    if (tokens.id_token) {
-      const decodedIdToken = jwtDecode(tokens.id_token);
-      console.log("Decoded ID Token:", JSON.stringify(decodedIdToken, null, 2));
-    } else {
-      console.warn("No ID token received in the token response");
-    }
+    // if (tokens.id_token) {
+    //   const decodedIdToken = jwtDecode(tokens.id_token);
+    //   console.log("Decoded ID Token:", JSON.stringify(decodedIdToken, null, 2));
+    // } else {
+    //   console.warn("No ID token received in the token response");
+    // }
 
     return tokens;
   }
@@ -159,7 +156,6 @@ export class Auth0Client {
   async verifyToken(token: string): Promise<{ payload: JWTPayload }> {
     try {
       const decodedToken = jwtDecode(token) as JWTPayload;
-      console.log("Decoded token:", decodedToken);
 
       // Verify token claims
       const now = Math.floor(Date.now() / 1000);
@@ -206,7 +202,6 @@ export class Auth0Client {
         }
       }
 
-      console.log("Token verification successful");
 
       return { payload: decodedToken };
     } catch (error) {
@@ -255,7 +250,6 @@ export class Auth0Client {
     }
 
     const userInfo: UserInfo = await response.json();
-    console.log('User Info:', JSON.stringify(userInfo, null, 2));
     return userInfo;
   }
 
