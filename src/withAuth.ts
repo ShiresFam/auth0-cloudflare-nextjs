@@ -28,12 +28,16 @@ export function withAuth(handler: AuthenticatedHandler) {
     try {
       const verifyResult = await auth0Client.verifyToken(accessToken);
       const authenticatedReq = new NextRequest(req, {
-        headers: req.headers,
+        headers: new Headers(req.headers),
       }) as AuthenticatedNextRequest;
       authenticatedReq.auth = {
         token: accessToken,
         payload: verifyResult.payload,
       };
+      
+      // Set the Authorization header
+      authenticatedReq.headers.set('Authorization', `Bearer ${accessToken}`);
+
       return handler(authenticatedReq);
     } catch (error) {
       console.error('Error verifying token:', error);
@@ -45,12 +49,15 @@ export function withAuth(handler: AuthenticatedHandler) {
           const tokens = await auth0Client.refreshToken(refreshToken);
           const verifyResult = await auth0Client.verifyToken(tokens.access_token);
           const authenticatedReq = new NextRequest(req, {
-            headers: req.headers,
+            headers: new Headers(req.headers),
           }) as AuthenticatedNextRequest;
           authenticatedReq.auth = {
             token: tokens.access_token,
             payload: verifyResult.payload,
           };
+
+          // Set the Authorization header
+          authenticatedReq.headers.set('Authorization', `Bearer ${tokens.access_token}`);
 
           const response = await handler(authenticatedReq);
 

@@ -83,11 +83,20 @@ type AuthenticatedHandler = (request: AuthenticatedNextRequest) => Promise<NextR
 
 declare function withAuth(handler: AuthenticatedHandler): (req: NextRequest) => Promise<NextResponse<unknown>>;
 
+declare function createAuth0CloudflareContext(baseContext: CloudflareContext): Auth0CloudflareContext;
+
+type AuthUtilCallback = (req: NextRequest, context: ReturnType<typeof createAuth0CloudflareContext>, auth0Client: Auth0Client) => Promise<NextResponse>;
+interface AuthUtilOptions {
+    onLogin?: AuthUtilCallback;
+    onCallback?: AuthUtilCallback;
+    onLogout?: AuthUtilCallback;
+    onGetUser?: AuthUtilCallback;
+}
+declare function setAuthUtilOptions(options: AuthUtilOptions): void;
 declare function handleLogin(req: NextRequest): Promise<NextResponse>;
 declare function handleCallback(req: NextRequest): Promise<NextResponse>;
 declare function handleLogout(req: NextRequest): Promise<NextResponse>;
-
-declare function createAuth0CloudflareContext(baseContext: CloudflareContext): Auth0CloudflareContext;
+declare function handleGetUser(req: NextRequest): Promise<NextResponse>;
 
 declare function handleAuth(): (req: NextRequest) => Promise<NextResponse<any>>;
 
@@ -96,4 +105,4 @@ declare function getSession(req: NextRequest): Promise<{
     accessToken: string;
 } | null>;
 
-export { Auth0Client, Auth0CloudflareContext, Auth0CloudflareEnv, Auth0Config, AuthenticatedHandler, AuthenticatedNextRequest, JWTPayload, TokenResponse, createAuth0CloudflareContext, getSession, handleAuth, handleCallback, handleLogin, handleLogout, withAuth };
+export { Auth0Client, Auth0CloudflareContext, Auth0CloudflareEnv, Auth0Config, AuthUtilOptions, AuthenticatedHandler, AuthenticatedNextRequest, JWTPayload, TokenResponse, createAuth0CloudflareContext, getSession, handleAuth, handleCallback, handleGetUser, handleLogin, handleLogout, setAuthUtilOptions, withAuth };

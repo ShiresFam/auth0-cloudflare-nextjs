@@ -25,8 +25,10 @@ __export(src_exports, {
   getSession: () => getSession,
   handleAuth: () => handleAuth,
   handleCallback: () => handleCallback,
+  handleGetUser: () => handleGetUser,
   handleLogin: () => handleLogin,
   handleLogout: () => handleLogout,
+  setAuthUtilOptions: () => setAuthUtilOptions,
   withAuth: () => withAuth
 });
 module.exports = __toCommonJS(src_exports);
@@ -286,12 +288,13 @@ function withAuth(handler) {
     try {
       const verifyResult = await auth0Client.verifyToken(accessToken);
       const authenticatedReq = new import_server.NextRequest(req, {
-        headers: req.headers
+        headers: new Headers(req.headers)
       });
       authenticatedReq.auth = {
         token: accessToken,
         payload: verifyResult.payload
       };
+      authenticatedReq.headers.set("Authorization", `Bearer ${accessToken}`);
       return handler(authenticatedReq);
     } catch (error) {
       console.error("Error verifying token:", error);
@@ -301,12 +304,13 @@ function withAuth(handler) {
           const tokens = await auth0Client.refreshToken(refreshToken);
           const verifyResult = await auth0Client.verifyToken(tokens.access_token);
           const authenticatedReq = new import_server.NextRequest(req, {
-            headers: req.headers
+            headers: new Headers(req.headers)
           });
           authenticatedReq.auth = {
             token: tokens.access_token,
             payload: verifyResult.payload
           };
+          authenticatedReq.headers.set("Authorization", `Bearer ${tokens.access_token}`);
           const response = await handler(authenticatedReq);
           const secureCookie = env.DISABLE_SECURE_COOKIES !== "true";
           response.cookies.set("access_token", tokens.access_token, {
@@ -332,6 +336,10 @@ function withAuth(handler) {
 // src/authUtils.ts
 var import_server2 = require("next/server");
 var import_cloudflare3 = require("@opennextjs/cloudflare");
+var customOptions = {};
+function setAuthUtilOptions(options) {
+  customOptions = options;
+}
 async function handleLogin(req) {
   const cloudflareContext = await (0, import_cloudflare3.getCloudflareContext)();
   const context = createAuth0CloudflareContext(cloudflareContext);
@@ -350,6 +358,9 @@ async function handleLogin(req) {
     callbackUrl,
     audience: env.AUTH0_AUDIENCE
   });
+  if (customOptions.onLogin) {
+    return customOptions.onLogin(req, context, auth0Client);
+  }
   try {
     const state = crypto.randomUUID();
     const authorizationUrl = await auth0Client.getAuthorizationUrl(state);
@@ -375,6 +386,9 @@ async function handleCallback(req) {
     callbackUrl,
     audience: env.AUTH0_AUDIENCE
   });
+  if (customOptions.onCallback) {
+    return customOptions.onCallback(req, context, auth0Client);
+  }
   const { searchParams } = new URL(req.url);
   const code = searchParams.get("code");
   const state = searchParams.get("state");
@@ -429,6 +443,9 @@ async function handleLogout(req) {
     callbackUrl: await constructFullUrl(req, "/api/auth/callback"),
     audience: env.AUTH0_AUDIENCE
   });
+  if (customOptions.onLogout) {
+    return customOptions.onLogout(req, context, auth0Client);
+  }
   const returnTo = await constructFullUrl(req, "/");
   const logoutUrl = auth0Client.getLogoutUrl(returnTo);
   const response = import_server2.NextResponse.redirect(logoutUrl);
@@ -436,6 +453,34 @@ async function handleLogout(req) {
   response.cookies.delete("refresh_token");
   response.cookies.delete("user_info");
   return response;
+}
+async function handleGetUser(req) {
+  const cloudflareContext = await (0, import_cloudflare3.getCloudflareContext)();
+  const context = createAuth0CloudflareContext(cloudflareContext);
+  const { env } = context;
+  const auth0Client = new Auth0Client({
+    domain: env.AUTH0_DOMAIN,
+    clientId: env.AUTH0_CLIENT_ID,
+    clientSecret: env.AUTH0_CLIENT_SECRET,
+    callbackUrl: await constructFullUrl(req, "/api/auth/callback"),
+    audience: env.AUTH0_AUDIENCE
+  });
+  if (customOptions.onGetUser) {
+    return customOptions.onGetUser(req, context, auth0Client);
+  }
+  const accessToken = req.cookies.get("access_token")?.value;
+  const userInfoCookie = req.cookies.get("user_info")?.value;
+  if (!accessToken || !userInfoCookie) {
+    return import_server2.NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  try {
+    await auth0Client.verifyToken(accessToken);
+    const userInfo = JSON.parse(userInfoCookie);
+    return import_server2.NextResponse.json(userInfo);
+  } catch (error) {
+    console.error("Error verifying token:", error);
+    return import_server2.NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 }
 
 // src/handleAuth.ts
@@ -504,7 +549,9 @@ function handleAuth() {
   getSession,
   handleAuth,
   handleCallback,
+  handleGetUser,
   handleLogin,
   handleLogout,
+  setAuthUtilOptions,
   withAuth
 });
