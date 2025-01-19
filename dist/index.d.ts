@@ -1,37 +1,6 @@
-import * as jose from 'jose';
-import { JWTPayload as JWTPayload$1 } from 'jose';
-import { NextRequest, NextResponse } from 'next/server';
 import { CloudflareContext } from '@opennextjs/cloudflare';
-
-interface Auth0Config {
-    domain: string;
-    clientId: string;
-    clientSecret: string;
-    callbackUrl: string;
-    audience?: string;
-}
-interface TokenResponse {
-    access_token: string;
-    id_token: string;
-    refresh_token?: string;
-    expires_in: number;
-    token_type: string;
-}
-interface JWTPayload extends jose.JWTPayload {
-    email?: string;
-    name?: string;
-}
-declare class Auth0Client {
-    protected config: Auth0Config;
-    protected jwksClient: ReturnType<typeof jose.createRemoteJWKSet>;
-    constructor(config: Auth0Config);
-    getAuthorizationUrl(state: string): Promise<string>;
-    exchangeCodeForTokens(code: string): Promise<TokenResponse>;
-    verifyToken(token: string): Promise<jose.JWTVerifyResult & {
-        payload: JWTPayload;
-    }>;
-    refreshToken(refreshToken: string): Promise<TokenResponse>;
-}
+import { NextRequest, NextResponse } from 'next/server';
+import { JWTPayload as JWTPayload$1 } from 'jose';
 
 interface Auth0Env {
     AUTH0_DOMAIN: string;
@@ -44,26 +13,62 @@ type Auth0CloudflareEnv = CloudflareContext["env"] & Auth0Env;
 interface Auth0CloudflareContext extends Omit<CloudflareContext, "env"> {
     env: Auth0CloudflareEnv;
 }
+interface Auth0Config {
+    domain: string;
+    clientId: string;
+    clientSecret: string;
+    callbackUrl: string;
+    audience?: string;
+}
 interface AuthenticatedNextRequest extends NextRequest {
     auth: {
         token: string;
         payload: JWTPayload$1;
     };
 }
-type AuthenticatedHandler = (request: AuthenticatedNextRequest, context: Auth0CloudflareContext) => Promise<Response>;
+type AuthenticatedHandler = (request: AuthenticatedNextRequest) => Promise<Response>;
 
-declare function withAuth(handler: AuthenticatedHandler): (req: NextRequest, context: Auth0CloudflareContext) => Promise<Response>;
+interface TokenResponse {
+    access_token: string;
+    id_token: string;
+    refresh_token?: string;
+    expires_in: number;
+    token_type: string;
+}
+interface JWTPayload {
+    [key: string]: string | number | boolean | null | undefined;
+}
+declare class Auth0Client {
+    private config;
+    private jwks;
+    constructor(config: Auth0Config);
+    private ensureHttps;
+    private normalizeUrl;
+    private decodeToken;
+    getAuthorizationUrl(state: string): Promise<string>;
+    exchangeCodeForTokens(code: string): Promise<TokenResponse>;
+    private isValidTokenResponse;
+    verifyToken(token: string): Promise<{
+        payload: JWTPayload;
+    }>;
+    private fetchJwks;
+    refreshToken(refreshToken: string): Promise<TokenResponse>;
+    getUserInfo(accessToken: string): Promise<any>;
+    getLogoutUrl(returnTo: string): string;
+}
 
-declare function handleLogin(req: NextRequest, context: CloudflareContext): Promise<NextResponse>;
-declare function handleCallback(req: NextRequest, context: CloudflareContext): Promise<NextResponse>;
+declare function withAuth(handler: AuthenticatedHandler): (req: NextRequest) => Promise<Response>;
+
+declare function handleLogin(req: NextRequest): Promise<NextResponse>;
+declare function handleCallback(req: NextRequest): Promise<NextResponse>;
 declare function handleLogout(req: NextRequest): Promise<NextResponse>;
 
 declare function createAuth0CloudflareContext(baseContext: CloudflareContext): Auth0CloudflareContext;
 
 declare function handleAuth(): (req: NextRequest) => Promise<NextResponse<unknown>>;
 
-declare function getSession(req: NextRequest, context: CloudflareContext): Promise<{
-    user: jose.JWTPayload & JWTPayload;
+declare function getSession(req: NextRequest): Promise<{
+    user: JWTPayload;
     accessToken: string;
 } | null>;
 

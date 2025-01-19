@@ -32,6 +32,5 @@ export interface AuthenticatedNextRequest extends NextRequest {
 }
 
 export type AuthenticatedHandler = (
-  request: AuthenticatedNextRequest,
-  context: Auth0CloudflareContext
+  request: AuthenticatedNextRequest
 ) => Promise<Response>;

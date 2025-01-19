@@ -1,17 +1,19 @@
 import { NextRequest } from "next/server";
 import { Auth0Client } from "./auth0Client";
-import { CloudflareContext } from "@opennextjs/cloudflare";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { createAuth0CloudflareContext } from "./contextUtils";
+import { constructFullUrl } from "./urlUtils";
 
-export async function getSession(req: NextRequest, context: CloudflareContext) {
-  const auth0Context = createAuth0CloudflareContext(context);
-  const { env } = auth0Context;
+export async function getSession(req: NextRequest) {
+  const cloudflareContext = await getCloudflareContext();
+  const context = createAuth0CloudflareContext(cloudflareContext);
+  const { env } = context;
 
   const auth0Client = new Auth0Client({
     domain: env.AUTH0_DOMAIN,
     clientId: env.AUTH0_CLIENT_ID,
     clientSecret: env.AUTH0_CLIENT_SECRET,
-    callbackUrl: env.AUTH0_CALLBACK_URL,
+    callbackUrl: constructFullUrl(req, "/api/auth/callback"),
     audience: env.AUTH0_AUDIENCE,
   });
 

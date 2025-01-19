@@ -21,11 +21,11 @@ export function createAuth0CloudflareContext(
   }
 
   const auth0Env: Auth0Env = {
-    AUTH0_DOMAIN: (baseContext.env as any).AUTH0_DOMAIN,
-    AUTH0_CLIENT_ID: (baseContext.env as any).AUTH0_CLIENT_ID,
-    AUTH0_CLIENT_SECRET: (baseContext.env as any).AUTH0_CLIENT_SECRET,
-    AUTH0_CALLBACK_URL: (baseContext.env as any).AUTH0_CALLBACK_URL,
-    AUTH0_AUDIENCE: (baseContext.env as any).AUTH0_AUDIENCE,
+    AUTH0_DOMAIN: (baseContext.env as Auth0Env).AUTH0_DOMAIN,
+    AUTH0_CLIENT_ID: (baseContext.env as Auth0Env).AUTH0_CLIENT_ID,
+    AUTH0_CLIENT_SECRET: (baseContext.env as Auth0Env).AUTH0_CLIENT_SECRET,
+    AUTH0_CALLBACK_URL: (baseContext.env as Auth0Env).AUTH0_CALLBACK_URL,
+    AUTH0_AUDIENCE: (baseContext.env as Auth0Env).AUTH0_AUDIENCE,
   };
 
   return {
