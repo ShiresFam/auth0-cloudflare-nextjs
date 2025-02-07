@@ -50,3 +50,6 @@ next-env.d.ts
 *.log
 
 /scripts
+
+next.config.mjs
+next.config.js
