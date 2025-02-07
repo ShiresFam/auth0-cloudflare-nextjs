@@ -1,0 +1,25 @@
+# Source
+src/
+tests/
+examples/
+docs/
+
+# Config files
+.eslintrc
+.prettierrc
+tsconfig.json
+jest.config.js
+.github/
+.gitignore
+.npmignore
+
+# Development
+scripts/
+coverage/
+.vscode/
+.idea/
+*.log
+.DS_Store
+
+# Environment
+.env*

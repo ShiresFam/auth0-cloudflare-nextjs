@@ -1,39 +1,32 @@
-import { NextRequest } from "next/server";
+import { NextRequest } from 'next/server';
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { createAuth0CloudflareContext } from "./contextUtils";
 
-export function constructBaseUrl(req: NextRequest): string {
-  let baseUrl: string | undefined;
+export async function constructBaseUrl(req: NextRequest): Promise<string> {
+  const cloudflareContext = await getCloudflareContext();
+  const context = createAuth0CloudflareContext(cloudflareContext);
+  const { env } = context;
 
-  // Try to use the referer first
-  const referer = req.headers.get("referer");
-  if (referer) {
-    try {
-      const refererUrl = new URL(referer);
-      baseUrl = `${refererUrl.protocol}//${refererUrl.host}`;
-    } catch (error) {
-      console.error("Error parsing referer:", error);
-    }
+  if (env.AUTH0_BASE_URL) {
+    return env.AUTH0_BASE_URL;
   }
 
-  // Initialize baseUrl as undefined
+  let protocol = req.headers.get('x-forwarded-proto') || 'http';
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || 'localhost:8000';
 
-  // If referer is not available or invalid, fall back to other headers
-  if (!baseUrl) {
-    const protocol = req.headers.get("x-forwarded-proto") || "https";
-    const host =
-      req.headers.get("x-forwarded-host") ||
-      req.headers.get("host") ||
-      "localhost";
-    baseUrl = `${protocol}://${host}`;
+  // Ensure HTTPS for non-localhost
+  if (!host.includes('localhost') && !host.includes('127.0.0.1')) {
+    protocol = 'https';
   }
 
-  console.log("Constructed Base URL:", baseUrl);
+  const baseUrl = `${protocol}://${host}`;
   return baseUrl;
 }
 
-export function constructFullUrl(req: NextRequest, path: string): string {
-  const baseUrl = constructBaseUrl(req);
+export async function constructFullUrl(req: NextRequest, path: string): Promise<string> {
+  const baseUrl = await constructBaseUrl(req);
   const fullUrl = new URL(path, baseUrl).toString();
 
-  console.log("Constructed Full URL:", fullUrl);
   return fullUrl;
 }
+

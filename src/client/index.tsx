@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface Auth0User {
+    sub: string;
     name?: string;
     email?: string;
     picture?: string;
