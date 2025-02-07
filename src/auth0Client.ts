@@ -126,14 +126,6 @@ export class Auth0Client {
       throw new Error("Invalid token response");
     }
 
-    
-    // if (tokens.id_token) {
-    //   const decodedIdToken = jwtDecode(tokens.id_token);
-    //   console.log("Decoded ID Token:", JSON.stringify(decodedIdToken, null, 2));
-    // } else {
-    //   console.warn("No ID token received in the token response");
-    // }
-
     return tokens;
   }
 

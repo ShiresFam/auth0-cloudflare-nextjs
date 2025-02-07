@@ -7,16 +7,13 @@ A lightweight, type-safe authentication library for Next.js applications deploye
 - Easy integration with Next.js and Cloudflare Workers
 - Type-safe authentication middleware
 - Built-in handlers for login, logout, and callback
-- Customizable Auth0 client
-- Token refresh functionality
-- Server-side session handling
-- Client-side React components for easy integration
-- Catch-all API route for simplified setup
-- Compatible with Next.js 14.2.5 and above
+- Server-side session management
+- Client-side React hooks and components
+- Automatic token refresh
+- Secure cookie handling
+- Customizable authentication flow
 
 ## Installation
-
-Install the package using npm:
 
 ```bash
 npm install auth0-cloudflare-nextjs
@@ -30,12 +27,9 @@ npm install auth0-cloudflare-nextjs
 
 ## Configuration
 
-1. Set up your Auth0 application and note down the following:
-   - Domain
-   - Client ID
-   - Client Secret
+### Environment Variables
 
-2. Add the following environment variables to your `wrangler.toml` file:
+Add the following to your `wrangler.toml`:
 
 ```toml
 [vars]
@@ -44,202 +38,199 @@ AUTH0_CLIENT_ID = "your-client-id"
 AUTH0_CLIENT_SECRET = "your-client-secret"
 AUTH0_CALLBACK_URL = "https://your-worker-domain.workers.dev/api/auth/callback"
 AUTH0_AUDIENCE = "your-api-audience" # optional
+AUTH0_BASE_URL = "https://your-base-url" # optional
+DISABLE_SECURE_COOKIES = "false" # optional, defaults to false
 ```
 
-## Usage
+### API Route Setup
 
-### Setting up the catch-all API route
-
-Create a catch-all API route for Auth0 in your Next.js project:
+Create a catch-all API route for Auth0:
 
 ```typescript
 // app/api/auth/[auth0]/route.ts
-import { handleAuth } from 'auth0-cloudflare-nextjs';
-import { getCloudflareContext } from '@opennextjs/cloudflare';
+import { handleAuth } from "auth0-cloudflare-nextjs";
 
-export const GET = async (req: NextRequest) => {
-  const context = await getCloudflareContext();
-  return handleAuth()(req, context);
-};
+export const GET = handleAuth();
 ```
 
-### Setting up middleware
+### Middleware Protection
 
-Create a `middleware.ts` file in the root of your Next.js project:
+Create a middleware to protect routes:
 
 ```typescript
-import { NextRequest, NextResponse } from 'next/server';
-import { withAuth } from 'auth0-cloudflare-nextjs';
-import { getCloudflareContext } from '@opennextjs/cloudflare';
+// middleware.ts
+import { NextRequest, NextResponse } from "next/server";
+import { withAuth } from "auth0-cloudflare-nextjs";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 export async function middleware(request: NextRequest) {
   const context = await getCloudflareContext();
-  
+
   const handler = withAuth(async (req, ctx) => {
-    // This function will only be called if the user is authenticated
-    // You can add additional logic here if needed
     return NextResponse.next();
   });
 
   return handler(request, context);
 }
 
-// Optionally, you can specify which routes should be protected
 export const config = {
-  matcher: ['/protected/:path*'],
+  matcher: ["/protected/:path*"],
 };
 ```
 
-### Server-side usage
+## Usage
 
-You can use the `getSession` function in your server-side code:
+### Session Management
+
+Access user sessions in server components:
 
 ```typescript
-import { getSession } from 'auth0-cloudflare-nextjs';
-import { getCloudflareContext } from '@opennextjs/cloudflare';
-import { headers } from 'next/headers';
+// Server Component
+import { getServerSession } from "auth0-cloudflare-nextjs";
 
-export default async function ProfileServer() {
-  const req = { headers: headers() } as NextRequest;
-  const context = await getCloudflareContext();
-  const session = await getSession(req, context);
+export default async function Page() {
+  const session = await getServerSession();
 
-  if (!session?.user) {
-    return <div>Not logged in</div>;
+  if (!session) {
+    return <div>Not authenticated</div>;
   }
 
-  const { user } = session;
-
-  return (
-    <div>
-      <img src={user.picture || "/placeholder.svg"} alt={user.name} />
-      <h2>{user.name}</h2>
-      <p>{user.email}</p>
-    </div>
-  );
+  return <div>Welcome {session.user.name}</div>;
 }
 ```
 
-### Client-side usage
+For custom handlers:
 
-Wrap your app with the `UserProvider`:
+```typescript
+import { getSessionFromRequest } from "auth0-cloudflare-nextjs";
+
+export async function GET(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  return Response.json(session.user);
+}
+```
+
+### Client-Side Authentication
+
+Set up the provider in your root layout:
 
 ```typescript
 // app/layout.tsx
-import { UserProvider } from 'auth0-cloudflare-nextjs/client';
+import { UserProvider } from "auth0-cloudflare-nextjs/client";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="en">
-      <UserProvider>
-        <body>{children}</body>
-      </UserProvider>
+    <html>
+      <body>
+        <UserProvider>{children}</UserProvider>
+      </body>
     </html>
   );
 }
 ```
 
-Use the `useUser` hook in your client components:
+Use the authentication hook in client components:
 
 ```typescript
-'use client';
+"use client";
+import { useUser } from "auth0-cloudflare-nextjs/client";
 
-import { useUser } from 'auth0-cloudflare-nextjs/client';
-
-export default function ProfileClient() {
-  const { user, error, isLoading } = useUser();
+export default function Profile() {
+  const { user, error, isLoading, login, logout } = useUser();
 
   if (isLoading) return <div>Loading...</div>;
   if (error) return <div>{error.message}</div>;
+  if (!user) return <button onClick={login}>Login</button>;
 
   return (
-    user && (
-      <div>
-        <img src={user.picture || "/placeholder.svg"} alt={user.name} />
-        <h2>{user.name}</h2>
-        <p>{user.email}</p>
-      </div>
-    )
+    <div>
+      <h2>{user.name}</h2>
+      <button onClick={logout}>Logout</button>
+    </div>
   );
 }
 ```
 
-## API Reference
+### Custom Authentication Handlers
 
-### `Auth0Client`
+Customize the authentication flow:
 
-The main class for interacting with Auth0. It provides methods for:
+```typescript
+import { setAuthUtilOptions } from 'auth0-cloudflare-nextjs';
 
-- `getAuthorizationUrl(state: string): Promise<string>`
-- `exchangeCodeForTokens(code: string): Promise<TokenResponse>`
-- `verifyToken(token: string): Promise<jose.JWTVerifyResult & { payload: JWTPayload }>`
-- `refreshToken(refreshToken: string): Promise<TokenResponse>`
+setAuthUtilOptions({
+  onLogin: async (req, context, auth0Client) => {
+    // Custom login logic
+    return NextResponse.redirect('...');
+  },
+  onCallback: async (req, context, auth0Client) => {
+    // Custom callback handling
+    return NextResponse.redirect('...');
+  },
+  onLogout: async (req, context, auth0Client) => {
+    // Custom logout logic
+    return NextResponse.redirect('...');
+  },
+  onGetUser: async (req, context, auth0Client) => {
+    // Custom user info retrieval
+    return NextResponse.json({...});
+  }
+});
+```
 
-### `withAuth`
+## Security Features
 
-A middleware function to protect API routes. It verifies the access token and refreshes it if necessary.
-
-### `handleAuth`
-
-A function that creates a catch-all handler for Auth0-related routes.
-
-### `getSession`
-
-A function to retrieve the current user's session on the server-side.
-
-### `UserProvider`
-
-A React component that provides Auth0 user context to your application.
-
-### `useUser`
-
-A React hook that provides access to the current user's information in client components.
-
-## Types
-
-- `Auth0Config`: Configuration interface for Auth0Client
-- `TokenResponse`: Interface for the token response from Auth0
-- `JWTPayload`: Interface for the JWT payload (extendable for custom claims)
-- `Auth0CloudflareContext`: Extended Cloudflare context with Auth0-specific environment variables
-- `AuthenticatedNextRequest`: Extended NextRequest with auth property
-- `AuthenticatedHandler`: Type for request handlers protected by withAuth
+- **Secure Cookie Storage**: Tokens are stored in HttpOnly, secure cookies
+- **Automatic Token Refresh**: Handles token expiration automatically
+- **CSRF Protection**: Implements state parameter validation
+- **Token Validation**: Verifies token signature, issuer, and audience
+- **Configurable Security**: Adjustable secure cookie settings
 
 ## Error Handling
 
-The library throws errors in various scenarios:
+The library handles various authentication scenarios:
 
-- Token exchange failure
-- Token verification failure
-- Token refresh failure
+### Token Validation
 
-It's recommended to wrap your API calls in try-catch blocks and handle these errors appropriately in your application.
+- Expired tokens (with automatic refresh)
+- Invalid signatures
+- Incorrect issuers
+- Invalid audiences
 
-## Security Considerations
+### Session Management
 
-- Always use HTTPS in production
-- Store tokens securely (this library uses HttpOnly, secure cookies)
-- Implement proper CSRF protection in your application
-- Regularly rotate your Auth0 client secret
+- Missing or invalid cookies
+- Invalid callback state
+- Failed token refresh attempts
 
-## Cloudflare Workers Compatibility
+### Network Issues
 
-This library is designed to work with Cloudflare Workers, which means:
+- Auth0 API connectivity problems
+- Callback URL mismatches
 
-- It doesn't rely on Node.js-specific features
-- It uses the Web Crypto API for cryptographic operations
-- Environment variables are accessed through the Cloudflare Workers runtime
+## TypeScript Support
 
-## Troubleshooting
+The library is written in TypeScript and provides full type definitions:
 
-Common issues and their solutions:
-
-1. "Token verification failed": Ensure your Auth0 domain and audience are correctly set.
-2. "Failed to exchange code for tokens": Check your Auth0 client ID and secret.
-3. "Callback URL mismatch": Verify that the callback URL in your Auth0 settings matches the one in your application.
+```typescript
+import type {
+  Auth0User,
+  Auth0Config,
+  AuthenticatedNextRequest,
+  JWTPayload,
+} from "auth0-cloudflare-nextjs";
+```
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please feel free to submit issues and pull requests.
 
 ## License
 
@@ -247,10 +238,14 @@ This project is licensed under the MIT License.
 
 ## Support
 
-If you encounter any issues or have questions, please file an issue on the GitHub repository.
+If you encounter any issues or have questions:
+
+1. Check the [GitHub Issues](https://github.com/yourusername/auth0-cloudflare-nextjs/issues)
+2. Create a new issue if none exists
+3. Join our community discussions
 
 ## Acknowledgements
 
-- [Auth0](https://auth0.com/) for their authentication platform
-- [Next.js](https://nextjs.org/) for the React framework
-- [Cloudflare Workers](https://workers.cloudflare.com/) for the serverless platform
+- [Auth0](https://auth0.com) for their authentication platform
+- [Next.js](https://nextjs.org) for the React framework
+- [Cloudflare Workers](https://workers.cloudflare.com) for the serverless platform
