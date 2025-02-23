@@ -43,15 +43,18 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         if (isMounted) {
             async function loadUserFromAPI() {
                 try {
-                    const res = await fetch('/api/auth/me');
-                    if (res.ok) {
-                        const userData: Auth0User = await res.json();
-                        setUser(userData);
+                    const res = await fetch('/api/auth/me', {
+                        credentials: 'include', // Important for cookies
+                    });
+                    const data: Auth0User = await res.json();
+
+                    if (data.isAuthenticated) {
+                        setUser(data.user);
                     } else {
                         setUser(null);
                     }
                 } catch (e) {
-                    setError(e instanceof Error ? e : new Error('An error occurred'));
+                    console.warn('Auth check failed:', e);
                     setUser(null);
                 } finally {
                     setIsLoading(false);
