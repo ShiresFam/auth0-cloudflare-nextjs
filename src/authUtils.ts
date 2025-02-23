@@ -3,8 +3,13 @@ import { Auth0Client } from "./auth0Client";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { createAuth0CloudflareContext } from "./contextUtils";
 import { constructFullUrl } from "./urlUtils";
+import { getSessionFromRequest } from "./getSession";
 
-export type AuthUtilCallback = (req: NextRequest, context: ReturnType<typeof createAuth0CloudflareContext>, auth0Client: Auth0Client) => Promise<NextResponse>;
+export type AuthUtilCallback = (
+  req: NextRequest,
+  context: ReturnType<typeof createAuth0CloudflareContext>,
+  auth0Client: Auth0Client
+) => Promise<NextResponse>;
 
 export interface AuthUtilOptions {
   onLogin?: AuthUtilCallback;
@@ -43,7 +48,9 @@ export async function handleLogin(req: NextRequest): Promise<NextResponse> {
   });
 
   if (customOptions.onLogin) {
-    return configureAuthResponse(await customOptions.onLogin(req, context, auth0Client));
+    return configureAuthResponse(
+      await customOptions.onLogin(req, context, auth0Client)
+    );
   }
 
   try {
@@ -51,14 +58,17 @@ export async function handleLogin(req: NextRequest): Promise<NextResponse> {
     const authorizationUrl = await auth0Client.getAuthorizationUrl(state);
 
     const response = NextResponse.redirect(authorizationUrl);
-    const secureCookie = env.DISABLE_SECURE_COOKIES !== 'true';
-    response.cookies.set("auth_state", state, { httpOnly: true, secure: secureCookie });
+    const secureCookie = env.DISABLE_SECURE_COOKIES !== "true";
+    response.cookies.set("auth_state", state, {
+      httpOnly: true,
+      secure: secureCookie,
+    });
 
     return configureAuthResponse(response);
   } catch (error) {
-    console.error('Error in handleLogin:', error);
+    console.error("Error in handleLogin:", error);
     return configureAuthResponse(
-      NextResponse.redirect(await constructFullUrl(req, '/auth/error'))
+      NextResponse.redirect(await constructFullUrl(req, "/auth/error"))
     );
   }
 }
@@ -79,7 +89,9 @@ export async function handleCallback(req: NextRequest): Promise<NextResponse> {
   });
 
   if (customOptions.onCallback) {
-    return configureAuthResponse(await customOptions.onCallback(req, context, auth0Client));
+    return configureAuthResponse(
+      await customOptions.onCallback(req, context, auth0Client)
+    );
   }
 
   const { searchParams } = new URL(req.url);
@@ -91,14 +103,14 @@ export async function handleCallback(req: NextRequest): Promise<NextResponse> {
   const storedState = req.cookies.get("auth_state")?.value;
 
   if (error) {
-    console.error('Auth0 error:', error, errorDescription);
+    console.error("Auth0 error:", error, errorDescription);
     return configureAuthResponse(
-      NextResponse.redirect(await constructFullUrl(req, '/auth/error'))
+      NextResponse.redirect(await constructFullUrl(req, "/auth/error"))
     );
   }
 
   if (!code || !state || !storedState || state !== storedState) {
-    console.error('Invalid callback parameters');
+    console.error("Invalid callback parameters");
     return configureAuthResponse(
       NextResponse.redirect(await constructFullUrl(req, "/api/auth/login"))
     );
@@ -110,7 +122,7 @@ export async function handleCallback(req: NextRequest): Promise<NextResponse> {
 
     const response = NextResponse.redirect(await constructFullUrl(req, "/"));
 
-    const secureCookie = env.DISABLE_SECURE_COOKIES !== 'true';
+    const secureCookie = env.DISABLE_SECURE_COOKIES !== "true";
     response.cookies.set("access_token", tokens.access_token, {
       httpOnly: true,
       secure: secureCookie,
@@ -123,10 +135,10 @@ export async function handleCallback(req: NextRequest): Promise<NextResponse> {
     }
     response.cookies.delete("auth_state");
 
-    response.cookies.set('user_info', JSON.stringify(userInfo), { 
-      httpOnly: true, 
+    response.cookies.set("user_info", JSON.stringify(userInfo), {
+      httpOnly: true,
       secure: secureCookie,
-      maxAge: 7 * 24 * 60 * 60 // 7 days
+      maxAge: 7 * 24 * 60 * 60, // 7 days
     });
 
     return configureAuthResponse(response);
@@ -152,7 +164,9 @@ export async function handleLogout(req: NextRequest): Promise<NextResponse> {
   });
 
   if (customOptions.onLogout) {
-    return configureAuthResponse(await customOptions.onLogout(req, context, auth0Client));
+    return configureAuthResponse(
+      await customOptions.onLogout(req, context, auth0Client)
+    );
   }
 
   const returnTo = await constructFullUrl(req, "/");
@@ -167,41 +181,41 @@ export async function handleLogout(req: NextRequest): Promise<NextResponse> {
 }
 
 export async function handleGetUser(req: NextRequest): Promise<NextResponse> {
-  const cloudflareContext = await getCloudflareContext();
-  const context = createAuth0CloudflareContext(cloudflareContext);
-  const { env } = context;
-
-  const auth0Client = new Auth0Client({
-    domain: env.AUTH0_DOMAIN,
-    clientId: env.AUTH0_CLIENT_ID,
-    clientSecret: env.AUTH0_CLIENT_SECRET,
-    callbackUrl: await constructFullUrl(req, "/api/auth/callback"),
-    audience: env.AUTH0_AUDIENCE,
-  });
-
   if (customOptions.onGetUser) {
-    return configureAuthResponse(await customOptions.onGetUser(req, context, auth0Client));
-  }
+    const cloudflareContext = await getCloudflareContext();
+    const context = createAuth0CloudflareContext(cloudflareContext);
+    const { env } = context;
 
-  const accessToken = req.cookies.get('access_token')?.value;
-  const userInfoCookie = req.cookies.get('user_info')?.value;
+    const auth0Client = new Auth0Client({
+      domain: env.AUTH0_DOMAIN,
+      clientId: env.AUTH0_CLIENT_ID,
+      clientSecret: env.AUTH0_CLIENT_SECRET,
+      callbackUrl: await constructFullUrl(req, "/api/auth/callback"),
+      audience: env.AUTH0_AUDIENCE,
+    });
 
-  if (!accessToken || !userInfoCookie) {
     return configureAuthResponse(
-      NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      await customOptions.onGetUser(req, context, auth0Client)
     );
   }
 
-  try {
-    await auth0Client.verifyToken(accessToken);
-    const userInfo = JSON.parse(userInfoCookie);
-    return configureAuthResponse(NextResponse.json(userInfo));
-  } catch (error) {
-    console.error('Error verifying token:', error);
+  const session = await getSessionFromRequest(req);
+
+  if (!session) {
     return configureAuthResponse(
-      NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      NextResponse.json({
+        isAuthenticated: false,
+        user: null,
+      })
     );
   }
+
+  return configureAuthResponse(
+    NextResponse.json({
+      isAuthenticated: true,
+      user: session.user,
+    })
+  );
 }
 
 export function handleAuth() {
@@ -209,26 +223,26 @@ export function handleAuth() {
     const { pathname } = new URL(req.url);
 
     // Handle OPTIONS request
-    if (req.method === 'OPTIONS') {
+    if (req.method === "OPTIONS") {
       const response = new NextResponse(null, { status: 200 });
       return configureAuthResponse(response);
     }
 
-    if (pathname.endsWith('/login')) {
+    if (pathname.endsWith("/login")) {
       return handleLogin(req);
     }
-    if (pathname.endsWith('/callback')) {
+    if (pathname.endsWith("/callback")) {
       return handleCallback(req);
     }
-    if (pathname.endsWith('/logout')) {
+    if (pathname.endsWith("/logout")) {
       return handleLogout(req);
     }
-    if (pathname.endsWith('/me')) {
+    if (pathname.endsWith("/me")) {
       return handleGetUser(req);
     }
 
     return configureAuthResponse(
-      NextResponse.json({ error: 'Not found' }, { status: 404 })
+      NextResponse.json({ error: "Not found" }, { status: 404 })
     );
   };
 }

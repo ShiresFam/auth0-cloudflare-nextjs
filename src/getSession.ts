@@ -1,8 +1,11 @@
-import { NextRequest } from 'next/server';
-import { Auth0Client } from './auth0Client';
-import { getCloudflareContext, CloudflareContext } from '@opennextjs/cloudflare';
-import { createAuth0CloudflareContext } from './contextUtils';
-import { cookies } from 'next/headers';
+import { NextRequest } from "next/server";
+import { Auth0Client } from "./auth0Client";
+import {
+  getCloudflareContext,
+  CloudflareContext,
+} from "@opennextjs/cloudflare";
+import { createAuth0CloudflareContext } from "./contextUtils";
+import { cookies } from "next/headers";
 
 export async function getSessionFromRequest(req: NextRequest) {
   const cloudflareContext = await getCloudflareContext();
@@ -17,8 +20,8 @@ export async function getSessionFromRequest(req: NextRequest) {
     audience: env.AUTH0_AUDIENCE,
   });
 
-  const accessToken = req.cookies.get('access_token')?.value;
-  const userInfoCookie = req.cookies.get('user_info')?.value;
+  const accessToken = req.cookies.get("access_token")?.value;
+  const userInfoCookie = req.cookies.get("user_info")?.value;
 
   if (!accessToken || !userInfoCookie) {
     return null;
@@ -32,7 +35,7 @@ export async function getSessionFromRequest(req: NextRequest) {
       accessToken,
     };
   } catch (error) {
-    console.error('Error verifying token:', error);
+    console.error("Error verifying token:", error);
     return null;
   }
 }
@@ -51,8 +54,8 @@ export async function getServerSession() {
   });
 
   const cookieStore = cookies();
-  const accessToken = cookieStore.get('access_token')?.value;
-  const userInfoCookie = cookieStore.get('user_info')?.value;
+  const accessToken = cookieStore.get("access_token")?.value;
+  const userInfoCookie = cookieStore.get("user_info")?.value;
 
   if (!accessToken || !userInfoCookie) {
     return null;
@@ -66,8 +69,7 @@ export async function getServerSession() {
       accessToken,
     };
   } catch (error) {
-    console.error('Error verifying token:', error);
+    console.error("Error verifying token:", error);
     return null;
   }
 }
-
