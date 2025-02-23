@@ -44,7 +44,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             async function loadUserFromAPI() {
                 try {
                     const res = await fetch('/api/auth/me', {
-                        credentials: 'include', // Important for cookies
+                        credentials: 'include',
                     });
                     const data: Auth0User = await res.json();
 
