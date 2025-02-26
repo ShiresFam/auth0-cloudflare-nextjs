@@ -46,15 +46,32 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
                     const res = await fetch('/api/auth/me', {
                         credentials: 'include',
                     });
+
                     const data: Auth0User = await res.json();
 
-                    if (data.isAuthenticated) {
+                    if (data.isAuthenticated && data.user) {
                         setUser(data.user);
                     } else {
+                        // If not authenticated but we have a refresh token, try refreshing
+                        const refreshToken = document.cookie.includes('refresh_token');
+                        if (refreshToken) {
+                            try {
+                                const refreshRes = await fetch('/api/auth/refresh', {
+                                    credentials: 'include',
+                                });
+                                if (refreshRes.ok) {
+                                    // Retry loading user data
+                                    loadUserFromAPI();
+                                    return;
+                                }
+                            } catch (refreshError) {
+                                console.error('Token refresh failed:', refreshError);
+                            }
+                        }
                         setUser(null);
                     }
                 } catch (e) {
-                    console.warn('Auth check failed:', e);
+                    console.error('Auth check failed:', e);
                     setUser(null);
                 } finally {
                     setIsLoading(false);

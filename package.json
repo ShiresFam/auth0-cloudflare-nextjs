@@ -1,6 +1,6 @@
 {
   "name": "auth0-cloudflare-nextjs",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Auth0 authentication for Next.js on Cloudflare Workers",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
