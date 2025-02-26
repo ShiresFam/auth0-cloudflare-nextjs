@@ -1,4 +1,4 @@
-import {jwtDecode} from "jwt-decode";
+import { jwtDecode } from "jwt-decode";
 import type { JWTPayload } from "./types";
 
 export interface Auth0Config {
@@ -68,10 +68,13 @@ export class Auth0Client {
 
   private ensureCorrectProtocol(url: string): string {
     const urlObject = new URL(url);
-    if (urlObject.hostname === 'localhost' || urlObject.hostname.includes('127.0.0.1')) {
-      urlObject.protocol = 'http:';
+    if (
+      urlObject.hostname === "localhost" ||
+      urlObject.hostname.includes("127.0.0.1")
+    ) {
+      urlObject.protocol = "http:";
     } else {
-      urlObject.protocol = 'https:';
+      urlObject.protocol = "https:";
     }
     return urlObject.toString();
   }
@@ -93,7 +96,9 @@ export class Auth0Client {
       params.append("audience", this.config.audience);
     }
 
-    const authorizationUrl = `${this.config.domain}/authorize?${params.toString()}`;
+    const authorizationUrl = `${
+      this.config.domain
+    }/authorize?${params.toString()}`;
     return authorizationUrl;
   }
 
@@ -107,7 +112,6 @@ export class Auth0Client {
       redirect_uri: this.config.callbackUrl,
     });
 
-
     const response = await fetch(tokenUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -116,11 +120,16 @@ export class Auth0Client {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Failed to exchange code for tokens. Status:", response.status, "Error:", errorText);
+      console.error(
+        "Failed to exchange code for tokens. Status:",
+        response.status,
+        "Error:",
+        errorText
+      );
       throw new Error(`Failed to exchange code for tokens: ${errorText}`);
     }
 
-    const tokens = await response.json() as TokenResponse;
+    const tokens = (await response.json()) as TokenResponse;
 
     if (!this.isValidTokenResponse(tokens)) {
       console.error("Invalid token response:", tokens);
@@ -132,17 +141,17 @@ export class Auth0Client {
 
   private isValidTokenResponse(tokens: unknown): tokens is TokenResponse {
     return (
-      typeof tokens === 'object' &&
+      typeof tokens === "object" &&
       tokens !== null &&
-      'access_token' in tokens &&
-      typeof tokens.access_token === 'string' &&
-      'id_token' in tokens &&
-      typeof tokens.id_token === 'string' &&
-      'expires_in' in tokens &&
-      typeof tokens.expires_in === 'number' &&
-      'token_type' in tokens &&
-      typeof tokens.token_type === 'string' &&
-      (!('refresh_token' in tokens) || typeof tokens.refresh_token === 'string')
+      "access_token" in tokens &&
+      typeof tokens.access_token === "string" &&
+      "id_token" in tokens &&
+      typeof tokens.id_token === "string" &&
+      "expires_in" in tokens &&
+      typeof tokens.expires_in === "number" &&
+      "token_type" in tokens &&
+      typeof tokens.token_type === "string" &&
+      (!("refresh_token" in tokens) || typeof tokens.refresh_token === "string")
     );
   }
 
@@ -195,7 +204,6 @@ export class Auth0Client {
         }
       }
 
-
       return { payload: decodedToken };
     } catch (error) {
       console.error("Error verifying token:", error);
@@ -217,11 +225,16 @@ export class Auth0Client {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Failed to refresh token. Status:", response.status, "Error:", errorText);
+      console.error(
+        "Failed to refresh token. Status:",
+        response.status,
+        "Error:",
+        errorText
+      );
       throw new Error(`Failed to refresh token: ${errorText}`);
     }
 
-    const tokens = await response.json() as TokenResponse;
+    const tokens = (await response.json()) as TokenResponse;
 
     if (!this.isValidTokenResponse(tokens)) {
       console.error("Invalid token response:", tokens);
@@ -234,12 +247,12 @@ export class Auth0Client {
   async getUserInfo(accessToken: string): Promise<UserInfo> {
     const response = await fetch(`${this.config.domain}/userinfo`, {
       headers: {
-        Authorization: `Bearer ${accessToken}`
-      }
+        Authorization: `Bearer ${accessToken}`,
+      },
     });
 
     if (!response.ok) {
-      throw new Error('Failed to fetch user info');
+      throw new Error("Failed to fetch user info");
     }
 
     const userInfo: UserInfo = await response.json();
@@ -249,10 +262,9 @@ export class Auth0Client {
   getLogoutUrl(returnTo: string): string {
     const params = new URLSearchParams({
       client_id: this.config.clientId,
-      returnTo: returnTo
+      returnTo: returnTo,
     });
 
     return `${this.config.domain}/v2/logout?${params.toString()}`;
   }
 }
-
