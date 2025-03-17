@@ -1,11 +1,11 @@
-import { NextRequest } from "next/server";
-import { Auth0Client } from "./auth0Client";
-import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { createAuth0CloudflareContext } from "./contextUtils";
-import { cookies } from "next/headers";
+import { NextRequest } from 'next/server';
+import { Auth0Client } from './auth0Client';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
+import { createAuth0CloudflareContext, getCompatibleCloudflareContext } from './contextUtils';
+import { cookies } from 'next/headers';
 
 export async function getSessionFromRequest(req: NextRequest) {
-  const cloudflareContext = await getCloudflareContext();
+  const cloudflareContext = await getCompatibleCloudflareContext();
   const context = createAuth0CloudflareContext(cloudflareContext);
   const { env } = context;
 
@@ -38,7 +38,7 @@ export async function getSessionFromRequest(req: NextRequest) {
 }
 
 export async function getServerSession() {
-  const cloudflareContext = await getCloudflareContext();
+  const cloudflareContext = await getCompatibleCloudflareContext();
   const context = createAuth0CloudflareContext(cloudflareContext);
   const { env } = context;
 

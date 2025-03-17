@@ -1,4 +1,4 @@
-import { CloudflareContext } from "@opennextjs/cloudflare";
+import { CloudflareContext, getCloudflareContext } from "@opennextjs/cloudflare";
 import { Auth0CloudflareContext, Auth0Env } from "./types";
 
 export function createAuth0CloudflareContext(
@@ -35,4 +35,19 @@ export function createAuth0CloudflareContext(
       ...auth0Env,
     },
   };
+}
+
+export async function getCompatibleCloudflareContext(): Promise<CloudflareContext> {
+  try {
+    // Try the new version with async flag
+    return await getCloudflareContext({ async: true });
+  } catch (error) {
+    try {
+      // Fall back to old version without options
+      return await getCloudflareContext();
+    } catch (fallbackError) {
+      console.error('Failed to get Cloudflare context:', fallbackError);
+      throw fallbackError;
+    }
+  }
 }

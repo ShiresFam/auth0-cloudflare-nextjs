@@ -56,20 +56,23 @@
     "node": ">=14.0.0"
   },
   "peerDependencies": {
-    "@opennextjs/cloudflare": "^0.3.5",
+    "@opennextjs/cloudflare": "^0.5.11",
     "next": "^14.0.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0"
   },
   "devDependencies": {
-    "@opennextjs/cloudflare": "^0.3.5",
+    "@cloudflare/workers-types": "^4.20250313.0",
+    "@opennextjs/cloudflare": "^0.5.11",
     "@types/node": "^20.4.2",
     "@types/react": "^19.0.7",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "eslint": "^8.44.0",
+    "force": "^0.0.3",
     "tsup": "^7.1.0",
-    "typescript": "^5.1.6"
+    "typescript": "^5.1.6",
+    "wrangler": "^4.0.0"
   },
   "dependencies": {
     "jwt-decode": "^4.0.0"
