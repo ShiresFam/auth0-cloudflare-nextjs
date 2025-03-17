@@ -1,6 +1,5 @@
 import { NextRequest } from 'next/server';
 import { Auth0Client } from './auth0Client';
-import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { createAuth0CloudflareContext, getCompatibleCloudflareContext } from './contextUtils';
 import { cookies } from 'next/headers';
 
