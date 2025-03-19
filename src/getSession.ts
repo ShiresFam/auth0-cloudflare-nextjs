@@ -3,7 +3,22 @@ import { Auth0Client } from './auth0Client';
 import { createAuth0CloudflareContext, getCompatibleCloudflareContext } from './contextUtils';
 import { cookies } from 'next/headers';
 
-export async function getSessionFromRequest(req: NextRequest) {
+async function getCompatibleCookieStore() {
+  try {
+    // Next.js 15 approach - cookies() is async
+    return await cookies();
+  } catch (error) {
+    try {
+      // Next.js 14 approach - cookies() is synchronous
+      return cookies();
+    } catch (fallbackError) {
+      console.error('Failed to get cookie store:', fallbackError);
+      throw fallbackError;
+    }
+  }
+}
+
+export async function getSessionFromRequest(request: NextRequest) {
   const cloudflareContext = await getCompatibleCloudflareContext();
   const context = createAuth0CloudflareContext(cloudflareContext);
   const { env } = context;
@@ -16,8 +31,8 @@ export async function getSessionFromRequest(req: NextRequest) {
     audience: env.AUTH0_AUDIENCE,
   });
 
-  const accessToken = req.cookies.get("access_token")?.value;
-  const userInfoCookie = req.cookies.get("user_info")?.value;
+  const accessToken = request.cookies.get("access_token")?.value;
+  const userInfoCookie = request.cookies.get("user_info")?.value;
 
   if (!accessToken || !userInfoCookie) {
     return null;
@@ -49,7 +64,7 @@ export async function getServerSession() {
     audience: env.AUTH0_AUDIENCE,
   });
 
-  const cookieStore = cookies();
+  const cookieStore = await getCompatibleCookieStore();
   const accessToken = cookieStore.get("access_token")?.value;
   const userInfoCookie = cookieStore.get("user_info")?.value;
 
