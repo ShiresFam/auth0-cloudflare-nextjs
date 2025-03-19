@@ -1,6 +1,6 @@
 {
   "name": "auth0-cloudflare-nextjs",
-  "version": "1.0.6",
+  "version": "1.0.8",
   "description": "Auth0 authentication for Next.js on Cloudflare Workers",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -57,7 +57,7 @@
   },
   "peerDependencies": {
     "@opennextjs/cloudflare": "^0.5.11",
-    "next": "^14.0.0",
+    "next": "^14.0.0 || ^15.0.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0"
   },
