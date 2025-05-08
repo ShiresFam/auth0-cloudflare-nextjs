@@ -15,6 +15,7 @@ interface Auth0ContextType {
     user: Auth0User | null;
     error: Error | null;
     isLoading: boolean;
+    accessToken: string | null;
     login: () => void;
     logout: () => void;
 }
@@ -23,6 +24,7 @@ const Auth0Context = createContext<Auth0ContextType>({
     user: null,
     error: null,
     isLoading: true,
+    accessToken: null,
     login: () => undefined,
     logout: () => undefined,
 });
@@ -32,6 +34,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     const [error, setError] = useState<Error | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isMounted, setIsMounted] = useState(false);
+    const [accessToken, setAccessToken] = useState<string | null>(null);
     const router = useRouter();
 
     useEffect(() => {
@@ -47,10 +50,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
                         credentials: 'include',
                     });
 
-                    const data: Auth0User = await res.json();
+                    const data: Auth0User & { accessToken?: string } = await res.json();
 
                     if (data.isAuthenticated && data.user) {
                         setUser(data.user);
+                        setAccessToken(data.accessToken || null);
                     } else {
                         // If not authenticated but we have a refresh token, try refreshing
                         const refreshToken = document.cookie.includes('refresh_token');
@@ -69,10 +73,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
                             }
                         }
                         setUser(null);
+                        setAccessToken(null);
                     }
                 } catch (e) {
                     console.error('Auth check failed:', e);
                     setUser(null);
+                    setAccessToken(null);
                 } finally {
                     setIsLoading(false);
                 }
@@ -99,7 +105,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
 
     return (
-        <Auth0Context.Provider value={{ user, error, isLoading, login, logout }}>
+        <Auth0Context.Provider value={{ user, error, isLoading, accessToken, login, logout }}>
             {children}
         </Auth0Context.Provider>
     );
