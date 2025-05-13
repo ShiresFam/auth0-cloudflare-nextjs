@@ -38,6 +38,27 @@ export async function handleLogin(req: NextRequest): Promise<NextResponse> {
   const { env } = context;
 
   const callbackUrl = await constructFullUrl(req, "/api/auth/callback");
+  const { searchParams } = new URL(req.url);
+  const returnTo = searchParams.get("returnTo");
+
+  // Validate returnTo URL is from our domain
+  if (returnTo && !returnTo.startsWith("/")) {
+    try {
+      const returnToUrl = new URL(returnTo);
+      const appUrl = new URL(await constructFullUrl(req, "/"));
+      if (returnToUrl.origin !== appUrl.origin) {
+        console.error("Invalid returnTo URL: must be from same origin");
+        return configureAuthResponse(
+          NextResponse.redirect(await constructFullUrl(req, "/auth/error"))
+        );
+      }
+    } catch (e) {
+      console.error("Invalid returnTo URL:", e);
+      return configureAuthResponse(
+        NextResponse.redirect(await constructFullUrl(req, "/auth/error"))
+      );
+    }
+  }
 
   const auth0Client = new Auth0Client({
     domain: env.AUTH0_DOMAIN,
@@ -55,11 +76,18 @@ export async function handleLogin(req: NextRequest): Promise<NextResponse> {
 
   try {
     const state = crypto.randomUUID();
-    const authorizationUrl = await auth0Client.getAuthorizationUrl(state);
+    // Include returnTo in state parameter for better security
+    const stateData = {
+      state,
+      returnTo: returnTo || "/"
+    };
+    const stateParam = Buffer.from(JSON.stringify(stateData)).toString("base64url");
+
+    const authorizationUrl = await auth0Client.getAuthorizationUrl(stateParam);
 
     const response = NextResponse.redirect(authorizationUrl);
     const secureCookie = env.DISABLE_SECURE_COOKIES !== "true";
-    response.cookies.set("auth_state", state, {
+    response.cookies.set("auth_state", stateParam, {
       httpOnly: true,
       secure: secureCookie,
     });
@@ -117,10 +145,22 @@ export async function handleCallback(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
+    const stateData = JSON.parse(Buffer.from(state, "base64url").toString());
+    const storedState = req.cookies.get("auth_state")?.value;
+
+    if (!code || !state || !storedState || state !== storedState) {
+      console.error("Invalid callback parameters");
+      return configureAuthResponse(
+        NextResponse.redirect(await constructFullUrl(req, "/api/auth/login"))
+      );
+    }
+
     const tokens = await auth0Client.exchangeCodeForTokens(code);
     const userInfo = await auth0Client.getUserInfo(tokens.access_token);
 
-    const response = NextResponse.redirect(await constructFullUrl(req, "/"));
+    // Use returnTo from state data
+    const returnTo = stateData.returnTo || "/";
+    const response = NextResponse.redirect(await constructFullUrl(req, returnTo));
 
     const secureCookie = env.DISABLE_SECURE_COOKIES !== "true";
     response.cookies.set("access_token", tokens.access_token, {
@@ -134,6 +174,7 @@ export async function handleCallback(req: NextRequest): Promise<NextResponse> {
       });
     }
     response.cookies.delete("auth_state");
+    response.cookies.delete("auth_return_to"); // Clean up the returnTo cookie
 
     response.cookies.set("user_info", JSON.stringify(userInfo), {
       httpOnly: true,
@@ -155,6 +196,24 @@ export async function handleLogout(req: NextRequest): Promise<NextResponse> {
   const context = createAuth0CloudflareContext(cloudflareContext);
   const { env } = context;
 
+  const { searchParams } = new URL(req.url);
+  let returnTo = searchParams.get("returnTo") || "/";
+
+  // Validate returnTo URL is from our domain
+  if (!returnTo.startsWith("/")) {
+    try {
+      const returnToUrl = new URL(returnTo);
+      const appUrl = new URL(await constructFullUrl(req, "/"));
+      if (returnToUrl.origin !== appUrl.origin) {
+        console.error("Invalid returnTo URL: must be from same origin");
+        returnTo = "/";
+      }
+    } catch (e) {
+      console.error("Invalid returnTo URL:", e);
+      returnTo = "/";
+    }
+  }
+
   const auth0Client = new Auth0Client({
     domain: env.AUTH0_DOMAIN,
     clientId: env.AUTH0_CLIENT_ID,
@@ -169,13 +228,15 @@ export async function handleLogout(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const returnTo = await constructFullUrl(req, "/");
-  const logoutUrl = auth0Client.getLogoutUrl(returnTo);
+  // Ensure returnTo is a full URL for Auth0
+  const fullReturnTo = await constructFullUrl(req, returnTo);
+  const logoutUrl = auth0Client.getLogoutUrl(fullReturnTo);
   const response = NextResponse.redirect(logoutUrl);
 
   response.cookies.delete("access_token");
   response.cookies.delete("refresh_token");
   response.cookies.delete("user_info");
+  response.cookies.delete("auth_return_to");
 
   return configureAuthResponse(response);
 }
